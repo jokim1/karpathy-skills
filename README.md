@@ -4,8 +4,10 @@ A Claude Code plugin marketplace for working better with LLM coding agents,
 derived from [Andrej Karpathy's publicly stated observations][karpathy-post]
 on where coding agents go wrong.
 
-Currently ships one plugin: **karpathy** — an auditor for your agent
-instruction files (`CLAUDE.md`, `AGENTS.md`, Cursor rules).
+Currently ships one plugin: **karpathy**, with two tools —
+[`/karpathy:audit`](#karpathyaudit--review-your-instruction-file) for your agent
+instruction files and [`/karpathy:diff`](#karpathydiff--review-a-change-before-you-commit)
+for the code changes an agent produces.
 
 ---
 
@@ -54,37 +56,40 @@ Four failure modes, and their fixes, fall out of that:
 
 ## The `karpathy` plugin
 
+The principles are easy to nod along to and hard to actually hold an agent to.
+This plugin operationalizes them at the two points where they matter, with one
+tool each:
+
+- **`/karpathy:audit`** works on your *instruction file* — the `CLAUDE.md` that
+  shapes how the agent behaves. A setup-and-hygiene tool.
+- **`/karpathy:diff`** works on the *code changes* the agent produces — before
+  you commit them. A use-it-every-change tool.
+
+Both follow the same contract: they report findings with severity, say what's
+already good, propose a concrete fix, and **stop** — neither changes anything
+without your approval.
+
+---
+
+### `/karpathy:audit` — review your instruction file
+
 An agent instruction file — `CLAUDE.md`, `AGENTS.md`, a Cursor rule — is itself
 something an LLM reads on **every turn**. The same failure modes Karpathy
 describes in *generated code* show up in the instruction file just as easily:
-it gets bloated with generic advice, it goes stale, it contradicts itself, it
-gives instructions too vague to act on.
+it bloats with generic advice, goes stale, contradicts itself, gives
+instructions too vague to act on.
 
-The `karpathy` plugin audits that file along two independent axes:
+`/karpathy:audit` audits that file along two axes:
 
 - **Coverage** — does the file actually instruct the agent to follow the four
-  principles? Each principle is scored Present / Partial / Missing. Behavioral
-  principles often belong in a *global* `~/.claude/CLAUDE.md` rather than every
-  project file, so a project file scoring low is flagged, not condemned.
+  principles? Each is scored Present / Partial / Missing. Behavioral principles
+  often belong in a *global* `~/.claude/CLAUDE.md` rather than every project
+  file, so a project file scoring low is flagged, not condemned.
 - **Quality** — judged *by those same four principles*, is the file itself a
-  good artifact? This is the more interesting half: it turns the principles
-  back on the instruction file and treats it the way you'd treat code.
+  good artifact? This turns the principles back on the instruction file and
+  treats it the way you'd treat code.
 
-It reports findings with severity (Critical / Warning / Nit), says what the
-file does well, proposes a concrete diff, and then **stops** — it never edits
-the file without your approval.
-
-### How it works
-
-1. Locates the target file (`CLAUDE.md`, then `AGENTS.md`, then a Cursor rule).
-2. Runs the **coverage** audit — the four principles, scored with evidence.
-3. Runs the **quality** audit — five lenses (below).
-4. Writes a structured report: coverage table, severity-ranked findings, a
-   "what's good" section, and a proposed diff.
-5. Applies the changes only after you approve them — surgically, touching only
-   what the findings name.
-
-### The five quality lenses
+The quality audit applies five lenses:
 
 | Lens | What it flags |
 | --- | --- |
@@ -95,8 +100,117 @@ the file without your approval.
 | **Consistency** | Rules that contradict each other, including *latent* contradictions with the four principles. |
 
 It deliberately does **not** flag legitimate project context — architecture
-maps, key-file tables, build commands. It audits behavioral guidance and file
-hygiene, not whether a given piece of context deserves to exist.
+maps, key-file tables, build commands.
+
+#### When and how often to run it
+
+`/karpathy:audit` is a **hygiene tool, not a daily one**. Run it:
+
+- **On adoption** — when you first install this plugin on a project, or first
+  write a `CLAUDE.md`.
+- **After substantial edits** to the `CLAUDE.md` / `AGENTS.md`.
+- **On a cadence — roughly monthly.** Instruction files rot: shipped roadmap
+  items, stale "current sprint" notes, dead PR numbers. A periodic audit is
+  what the *Staleness* lens exists to catch.
+- **When the agent starts misbehaving** — making silent assumptions,
+  over-building, ignoring conventions. The instruction file is often the cause;
+  audit it before blaming the model.
+- **Before onboarding someone** to the repo — the `CLAUDE.md` is onboarding
+  document number one.
+
+Running it more often than that is overkill — the file simply doesn't change
+fast enough to need it. For the change-by-change loop, that's `/karpathy:diff`.
+
+---
+
+### `/karpathy:diff` — review a change before you commit
+
+Where `/karpathy:audit` is occasional, `/karpathy:diff` is for **every change**.
+It reviews an in-progress code change — a git diff — before you commit or accept
+it. The governing question:
+
+> **Does every changed line trace to the task that was asked?**
+
+Coding agents reliably do more than they were asked: they refactor adjacent
+code, reformat, rename, delete comments and code they don't fully understand,
+and over-build the part they *were* asked for. None of that is visible if you
+accept diffs without reading them — which is how most changes get accepted.
+`/karpathy:diff` is the safety net under that, and it matters most for anyone
+who leans on the agent rather than reading every line.
+
+#### What it flags
+
+It walks the diff hunk by hunk and sorts each into *traces to the task*,
+*doesn't trace*, or *can't tell*. The hunks that don't trace become findings:
+
+| Category | What it catches |
+| --- | --- |
+| **Collateral files** | Files changed that the task never required. |
+| **Drive-by refactors** | Renaming or restructuring working code next to the task but not part of it. |
+| **Reformatting / style drift** | Whitespace, quote-style, reordered imports — noise that bloats the diff and hides the real change. |
+| **Unexplained deletions** | Comments or code removed that the task never called for — Karpathy's specific complaint. Every deletion is guilty until it traces. |
+| **Over-engineering** | Speculative abstraction, unrequested config, error handling for impossible cases, 200 lines where 50 would do. |
+| **Missing verification** | A change — especially a bug fix — with no accompanying test or check. |
+| **Orphans** | Imports or variables this change left unused. (Cleaning these up is *in* scope — it's the one removal the skill encourages.) |
+
+It calibrates to the repo: if your `CLAUDE.md` sanctions aggressive deletion of
+legacy code, the skill respects that and won't flag it. It also never flags the
+intended change itself — the work you asked for is supposed to be there.
+
+#### How to use it
+
+```
+/karpathy:diff
+```
+
+With no argument it reviews **all uncommitted changes** (`git diff HEAD`). You
+can point it somewhere specific:
+
+```
+/karpathy:diff --staged          # only staged changes
+/karpathy:diff main...HEAD       # a branch's worth of changes
+/karpathy:diff src/auth/         # changes under one path
+```
+
+It also triggers automatically when you ask Claude to "review my changes" or
+"check this before I commit."
+
+The review needs to know **what the change was meant to do** — that's the basis
+of the trace test. Run inside the session where the change was made, it reads
+the task from the conversation. Run cold, it will ask you one question: what was
+this change meant to accomplish.
+
+#### When to run it
+
+Run it **before every commit**, or right after the agent finishes a batch of
+edits — especially any batch you didn't read line by line. This is the daily
+driver of the plugin. A good habit: `/karpathy:diff`, read the findings, apply
+the fixes, *then* commit.
+
+#### The report you get
+
+A structured report: the task it's reviewing against, the size of the change, a
+**traceability line** (how many hunks trace to the task), severity-ranked
+findings (Critical / Warning / Nit) each with a location and a concrete fix, a
+**what's clean** section naming the parts that correctly trace, and a list of
+proposed fixes. Then it asks before applying anything.
+
+#### Example
+
+You ask the agent to *"add a `lastLogin` timestamp to the user model."*
+`/karpathy:diff` might report:
+
+- **What's clean** — `models/user.ts`: the `lastLogin` field and its migration
+  trace directly to the task.
+- **[Warning] Reformatting** — `models/user.ts`: the agent also reordered every
+  import and switched the file from `'` to `"` quotes. *Revert it — it buries
+  one real change under 40 lines of noise.*
+- **[Critical] Unexplained deletion** — `auth/session.ts`: a comment explaining
+  a session-refresh edge case was deleted. The file wasn't part of the task.
+  *Restore it.*
+
+Three findings, one of them genuinely dangerous — none of which you'd see if you
+just accepted the diff.
 
 ---
 
@@ -106,29 +220,28 @@ Karpathy's post inspired a popular community repo,
 [multica-ai/andrej-karpathy-skills][orig-repo] (100k+ stars), which distills the
 same observations into a `CLAUDE.md` file and a Claude Code plugin.
 
-That repo and this one solve **different problems**, and it's worth being
-precise about the difference:
+That repo and this one solve **different problems**:
 
 - **The original repo distributes the guidance.** It gives you a well-written
   `CLAUDE.md` to drop into a project (or a plugin that installs it) so the agent
-  is *told* to follow the four principles. It is excellent at that, and the
+  is *told* to follow the four principles. It's excellent at that, and the
   writing is genuinely good.
-- **This plugin audits your existing file.** It doesn't hand you a template —
-  it reads the `CLAUDE.md` (or `AGENTS.md`) you already have and tells you
-  what's wrong with it: missing principle coverage, but also bloat,
-  staleness, ambiguity, missing verification commands, and contradictions.
-  Then it proposes a concrete diff.
+- **This plugin checks the work.** It doesn't hand you a template — it audits
+  the instruction file you already have (`/karpathy:audit`) and the changes the
+  agent actually produces (`/karpathy:diff`), and tells you where they fall
+  short of the principles.
 
-In short: the original is *"here is a good instruction file."* This is *"a
-linter for the instruction file you already have."* The original is a one-time
-paste; an audit is something you re-run as the file drifts.
+In short: the original is *"here is a good instruction file."* This is *"tools
+that check whether the principles are actually being followed"* — in your config
+and in your diffs. The original is a one-time paste; checking is something you
+re-run as things drift.
 
-They also compose. This plugin embeds an equivalent canonical four-principle
-block, so when an audit finds coverage missing it can add the guidance too —
-it covers the original repo's use case and adds the diagnostic layer on top.
-We built a separate tool rather than forking theirs because the audit workflow,
-the quality lenses, and the report-then-approve loop are a different thing from
-a static guidelines file — not a tweak to one.
+They also compose. `/karpathy:audit` embeds an equivalent canonical
+four-principle block, so when it finds coverage missing it can add the guidance
+too — it covers the original repo's use case and adds the diagnostic layer on
+top. We built a separate plugin rather than forking theirs because an audit
+workflow and a diff-review workflow are different things from a static
+guidelines file — not a tweak to one.
 
 ---
 
@@ -145,22 +258,20 @@ In Claude Code:
 
 ## Usage
 
-Run it on a file:
-
 ```
-/karpathy:audit path/to/CLAUDE.md
+/karpathy:audit [path]      # audit a CLAUDE.md / AGENTS.md (defaults to ./CLAUDE.md)
+/karpathy:diff  [ref/path]  # review a change before committing (defaults to all uncommitted)
 ```
 
-With no argument it audits `./CLAUDE.md` in the current repo (falling back to
-`AGENTS.md`, then `.cursor/rules/*.mdc`). It also triggers automatically when
-you ask Claude to "audit my CLAUDE.md" or "check my agent instructions."
+Both also trigger automatically — `/karpathy:audit` on "audit my CLAUDE.md",
+`/karpathy:diff` on "review my changes before I commit."
 
 ---
 
 ## Evaluation results
 
-The skill was benchmarked before release. Three `CLAUDE.md` test files were each
-audited twice — once with the `karpathy` skill, once with an unaided baseline
+`/karpathy:audit` was benchmarked before release. Three `CLAUDE.md` test files
+were each audited twice — once with the skill, once with an unaided baseline
 (capable Claude, no skill) — and scored against 16 objective assertions.
 
 **The test files:**
@@ -196,14 +307,13 @@ baseline's review format drifted from run to run. The most telling case is the
 third test — the file that was already good. The baseline rated it "good" but
 still appended five suggestions and skipped coverage scoring; the skill returned
 **zero quality findings and "ship as-is."** Not manufacturing work on a healthy
-file is the hardest behavior to get right, and it is the clearest thing the
-skill adds.
+file is the hardest behavior to get right, and it's the clearest thing the skill
+adds.
 
 **Honest caveats.** This is one run per cell — directional evidence, not a
-statistically robust benchmark. And the skill is not free: it roughly doubles
-wall-clock time and adds about 30% more tokens, because it does more work (the
-coverage table, severity ranking, a proposed diff). For an audit you run
-occasionally rather than on every turn, that is a fair trade.
+statistically robust benchmark. The skill also roughly doubles wall-clock time
+and adds about 30% more tokens, because it does more work. `/karpathy:diff` is
+newer and not yet benchmarked; it follows the same report-then-approve design.
 
 ---
 
@@ -218,10 +328,13 @@ karpathy-skills/
         ├── .claude-plugin/
         │   └── plugin.json       # plugin manifest
         ├── commands/
-        │   └── audit.md          # the /karpathy:audit command
+        │   ├── audit.md          # the /karpathy:audit command
+        │   └── diff.md           # the /karpathy:diff command
         └── skills/
-            └── karpathy-audit/
-                └── SKILL.md      # the audit logic (also auto-triggers)
+            ├── karpathy-audit/
+            │   └── SKILL.md      # audit logic (also auto-triggers)
+            └── karpathy-diff/
+                └── SKILL.md      # diff-review logic (also auto-triggers)
 ```
 
 To add another plugin later, drop it under `plugins/` and add an entry to
