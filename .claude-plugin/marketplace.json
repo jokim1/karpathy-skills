@@ -1,0 +1,23 @@
+{
+  "name": "karpathy-skills",
+  "owner": {
+    "name": "Joseph Kim"
+  },
+  "description": "Claude Code tooling derived from Andrej Karpathy's publicly stated observations on working with LLM coding agents.",
+  "plugins": [
+    {
+      "name": "karpathy",
+      "source": "./plugins/karpathy",
+      "description": "Audit a CLAUDE.md, AGENTS.md, or .cursor/rules file against Karpathy's four LLM-coding principles — checks both whether the file instructs the agent to follow them (coverage) and whether the file itself is lean, unambiguous, current, and contradiction-free (quality).",
+      "version": "1.0.0",
+      "author": {
+        "name": "Joseph Kim"
+      },
+      "homepage": "https://github.com/jokim1/karpathy-skills",
+      "repository": "https://github.com/jokim1/karpathy-skills",
+      "license": "MIT",
+      "keywords": ["karpathy", "claude-md", "agents-md", "audit", "agent-instructions"],
+      "category": "productivity"
+    }
+  ]
+}

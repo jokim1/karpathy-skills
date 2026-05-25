@@ -1,0 +1,12 @@
+{
+  "name": "karpathy",
+  "description": "Audit a CLAUDE.md, AGENTS.md, or .cursor/rules file against Andrej Karpathy's four LLM-coding principles. Checks coverage (does the file instruct the agent to follow the principles) and quality (is the file itself lean, unambiguous, current, and contradiction-free). Reports findings with severity, then applies fixes on approval.",
+  "version": "1.0.0",
+  "author": {
+    "name": "Joseph Kim"
+  },
+  "homepage": "https://github.com/jokim1/karpathy-skills",
+  "repository": "https://github.com/jokim1/karpathy-skills",
+  "license": "MIT",
+  "keywords": ["karpathy", "claude-md", "agents-md", "audit", "agent-instructions"]
+}
