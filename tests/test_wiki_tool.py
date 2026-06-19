@@ -81,6 +81,52 @@ class WikiToolTests(unittest.TestCase):
         self.assertEqual("custom index\n", index.read_text(encoding="utf-8"))
         self.assertIn("knowledge/wiki/index.md", second["skipped"])
 
+    def test_status_reports_incomplete_setup_when_required_files_are_missing(self):
+        (self.repo / "knowledge" / "wiki" / "components").mkdir(parents=True)
+
+        result = wiki_tool.status(self.repo)
+
+        self.assertEqual("incomplete-setup", result["setup_state"])
+        self.assertEqual(
+            [
+                "knowledge/wiki/index.md",
+                "knowledge/wiki/log.md",
+                "knowledge/wiki/.karpathy-wiki.json",
+            ],
+            result["missing_required_files"],
+        )
+
+    def test_status_reports_needs_starter_concepts_after_init(self):
+        (self.repo / "src").mkdir()
+        (self.repo / "src" / "main.tsx").write_text("export function main() {}\n", encoding="utf-8")
+        (self.repo / "package.json").write_text(
+            '{"scripts":{"test":"vitest run","typecheck":"tsc --noEmit"}}\n',
+            encoding="utf-8",
+        )
+        wiki_tool.init_wiki(self.repo)
+
+        result = wiki_tool.status(self.repo)
+
+        self.assertEqual("needs-starter-concepts", result["setup_state"])
+        self.assertEqual(0, result["concept_count"])
+        self.assertEqual([], result["missing_required_files"])
+        candidate_paths = [candidate["path"] for candidate in result["starter_candidates"]]
+        self.assertIn("knowledge/wiki/components/app-boot.md", candidate_paths)
+        self.assertIn("knowledge/wiki/tests/verification-surface.md", candidate_paths)
+
+    def test_status_reports_ready_when_concepts_exist(self):
+        wiki_tool.init_wiki(self.repo)
+        (self.repo / "src").mkdir()
+        (self.repo / "src" / "auth.ts").write_text("export const auth = true;\n", encoding="utf-8")
+        self.write_concept("knowledge/wiki/components/auth.md", "../../../src/auth.ts")
+        wiki_tool.save_manifest(self.repo)
+
+        result = wiki_tool.status(self.repo)
+
+        self.assertEqual("ready", result["setup_state"])
+        self.assertEqual(1, result["concept_count"])
+        self.assertEqual([], result["starter_candidates"])
+
     def test_refresh_manifest_indexes_file_resources(self):
         (self.repo / "src").mkdir()
         (self.repo / "src" / "auth.ts").write_text("export const auth = true;\n", encoding="utf-8")
@@ -259,6 +305,55 @@ class WikiToolTests(unittest.TestCase):
 
         with self.assertRaises(SystemExit):
             wiki_tool.install_hook(self.repo, SCRIPT)
+
+    def test_append_improvement_note_creates_local_dogfood_log(self):
+        result = wiki_tool.append_improvement_note(
+            self.repo,
+            "Setup leaked helper scripts",
+            "The agent asked the user to run wiki_tool.py manually.",
+            suggestion="Make the skill run helper scripts internally and summarize results.",
+            evidence=["plugins/karpathy/skills/karpathy-wiki/SKILL.md"],
+            tags=["ux", "dogfood"],
+        )
+        path = self.repo / "knowledge" / "outputs" / "wiki-improvements.md"
+        text = path.read_text(encoding="utf-8")
+
+        self.assertEqual("knowledge/outputs/wiki-improvements.md", result["path"])
+        self.assertIn("# Karpathy Wiki Improvement Notes", text)
+        self.assertIn("## ", text)
+        self.assertIn("Setup leaked helper scripts", text)
+        self.assertIn("The agent asked the user to run wiki_tool.py manually.", text)
+        self.assertIn("Make the skill run helper scripts internally and summarize results.", text)
+        self.assertIn("plugins/karpathy/skills/karpathy-wiki/SKILL.md", text)
+        self.assertIn("Do not stage this file automatically.", text)
+
+    def test_note_improvement_cli_appends_log(self):
+        result = run(
+            [
+                sys.executable,
+                str(SCRIPT),
+                "note-improvement",
+                "--repo",
+                str(self.repo),
+                "--title",
+                "Search result noisy",
+                "--body",
+                "The top result was right, but unrelated concepts ranked too high.",
+                "--suggestion",
+                "Tune search scoring or include confidence guidance in answer mode.",
+                "--evidence",
+                "knowledge/wiki/tests/verification-surface.md",
+                "--tag",
+                "ranking",
+            ],
+            self.repo,
+        )
+
+        self.assertIn("Appended knowledge/outputs/wiki-improvements.md", result.stdout)
+        text = (self.repo / "knowledge" / "outputs" / "wiki-improvements.md").read_text(encoding="utf-8")
+        self.assertIn("Search result noisy", text)
+        self.assertIn("Tune search scoring or include confidence guidance in answer mode.", text)
+        self.assertIn("Tags: ranking", text)
 
 
 if __name__ == "__main__":

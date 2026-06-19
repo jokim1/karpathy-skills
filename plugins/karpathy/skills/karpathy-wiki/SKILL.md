@@ -22,19 +22,72 @@ source code.
 - Use one public command: `/karpathy:wiki` or the human phrase
   `/karpathy wiki`.
 - Infer the internal mode from repo state and user intent.
+- Treat `scripts/wiki_tool.py` as an internal helper for the agent. Do not make
+  the user run helper commands during normal setup, question, task brief,
+  update, or doctor flows. Run the helper yourself, then report the result in
+  plain language.
 - If the client rejects `/karpathy wiki` as a slash command, tell the user to
   use `/karpathy:wiki` or type `karpathy wiki` as plain text. Do not invent a
   second command family.
 - Treat source code, tests, and explicit user instructions as authoritative.
 - Use the wiki to narrow where to look; read cited source files before editing
   code or making implementation claims.
-- Ask before writing wiki files, Git hooks, or agent instruction files.
+- For normal wiki writes, state the exact files you will create or update and
+  proceed when the user has asked for setup/update or has accepted your proposed
+  wiki action. Ask a clarifying question only when the write scope is ambiguous
+  or broader than the active mode.
+- Always ask before installing Git hooks or editing agent instruction files.
 - Never stage or commit `CLAUDE.md`, `AGENTS.md`, `.cursor/rules`, or other
   agent instruction / memory files.
 - Never copy large source files into the wiki. Summarize and cite them.
 
 Resolve bundled resources relative to this `SKILL.md`. Use
 `scripts/wiki_tool.py` for deterministic repo/wiki operations.
+
+## UX Contract
+
+`/karpathy:wiki` is the product. `wiki_tool.py` is plumbing.
+
+- Do not hand the user a terminal checklist of helper commands unless they
+  explicitly ask to operate manually or debug the helper itself.
+- Do not ask the user to paste concept pages into an editor. If wiki files need
+  semantic content, read the cited sources and write the pages yourself.
+- Keep user-facing responses about state and decisions: missing wiki, starter
+  concepts needed, affected concepts, doctor issues, proposed files, and
+  verification result.
+- It is fine to mention helper command names in concise verification summaries,
+  but not as instructions the user must execute.
+- When user approval is needed, ask for the decision, not for mechanical steps.
+
+## Self-Improvement Notes
+
+The skill can dogfood itself by writing local improvement notes when real usage
+exposes reusable product lessons. This is for local learning, not telemetry.
+
+Use `knowledge/outputs/wiki-improvements.md` as the default append-only log.
+When writing through the helper, run internally:
+
+```bash
+python3 <skill-dir>/scripts/wiki_tool.py note-improvement --repo . --title "<short title>" --body "<observation>" --suggestion "<suggested skill change>" --evidence "<path>" --tag "<tag>"
+```
+
+Write an improvement note only when the run reveals a reusable problem or
+opportunity in the karpathy-wiki skill itself, such as:
+
+- the mode choice was confusing or wrong
+- the agent exposed helper-script mechanics to the user
+- starter concept suggestions were missing, noisy, or poorly cited
+- doctor/update output was technically correct but hard to act on
+- the skill needed a stronger guardrail, example, or regression test
+
+Do not write improvement notes for ordinary repo facts, user preferences, raw
+transcripts, secrets, personal data, or large source excerpts. Keep entries
+short and actionable: observation, evidence path(s), and a concrete suggested
+skill change. Never stage or commit the improvement log automatically.
+
+Scaling rule: keep this local by default. If more users adopt the skill, collect
+these notes only through an explicit export or issue-filing flow; do not add
+background network upload or cross-user aggregation.
 
 ## Directory Shape
 
@@ -83,7 +136,7 @@ Do not edit the manifest manually; regenerate it with `refresh-manifest`.
 
 ## First Step
 
-Run:
+Internally run:
 
 ```bash
 python3 <skill-dir>/scripts/wiki_tool.py status --repo . --json
@@ -91,7 +144,9 @@ python3 <skill-dir>/scripts/wiki_tool.py status --repo . --json
 
 Use the result to choose a mode:
 
-- **Setup**: no `knowledge/wiki/` exists, or the user says setup/init.
+- **Setup**: `setup_state` is `missing` or `incomplete-setup`, or the user
+  says setup/init.
+- **Starter concepts**: `setup_state` is `needs-starter-concepts`.
 - **Doctor**: the user says doctor, health, lint, validate, or check wiki.
 - **Question**: the intent is question-shaped.
 - **Task brief**: the intent is task-shaped.
@@ -99,8 +154,9 @@ Use the result to choose a mode:
   manifest.
 - **Status**: no explicit intent and no action is needed.
 
-If status reports no wiki and the user asked a question or task, explain that
-the wiki must be created first and ask whether to set it up.
+If status reports no wiki, incomplete setup, or no starter concepts and the
+user asked a question or task, explain that the wiki must be finished first and
+ask whether to set it up or add starter concepts.
 
 Mode precedence:
 
@@ -114,8 +170,10 @@ Mode precedence:
 
 ## Setup Mode
 
-1. Say what will be created under `knowledge/` and ask for approval.
-2. After approval, run:
+1. Say what will be created under `knowledge/`. If the user explicitly asked to
+   set up the wiki, this is enough context to proceed with wiki file writes. If
+   setup is inferred from an ambiguous request, ask one clarifying question.
+2. Run internally:
 
    ```bash
    python3 <skill-dir>/scripts/wiki_tool.py init --repo .
@@ -129,14 +187,16 @@ Mode precedence:
    python3 <skill-dir>/scripts/wiki_tool.py scan --repo . --json
    ```
 
-4. Create only a small starter wiki:
+4. Create only a small starter wiki in the same flow:
    - `knowledge/wiki/index.md` with repo overview, known commands, and links.
    - `knowledge/wiki/log.md` with the setup entry.
    - 2-5 concept pages max, only when they can be cited to specific source or
      docs.
    - A verification surface page when commands are discoverable.
    Every implementation-relevant claim must cite a source file or repo doc.
-5. Ask whether to enable automation:
+5. Run `refresh-manifest` and `doctor` internally. Report whether doctor is
+   clean and how many concepts are indexed.
+6. Ask whether to enable automation:
    - Manual only.
    - Remind me when stale.
    - Strict stale reminder, only for users who explicitly want commits blocked.
@@ -171,6 +231,36 @@ advisory: read cited source files before editing, and keep changes surgical.
 ```
 
 Do not stage or commit those instruction files.
+
+## Starter Concepts Mode
+
+Use this when `status` reports `setup_state: needs-starter-concepts`. The
+scaffold is healthy, but the wiki is not useful yet.
+
+1. Run or reuse scan output:
+
+   ```bash
+   python3 <skill-dir>/scripts/wiki_tool.py scan --repo . --json
+   ```
+
+2. Use `starter_candidates` as concrete options, not as a mandate. Read the
+   candidate resources before writing claims.
+3. Propose 2-5 small concept pages. Prefer:
+   - one component page for the app/server entrypoint when detected
+   - one test surface page when verification commands are detected
+   - one invariant/workflow page only when a cited doc supports it
+4. If the user explicitly asked for setup or starter concepts, create only the
+   proposed pages after briefly listing them. If the intent is ambiguous, ask
+   whether to create the starter concepts.
+5. Create the agreed concept pages yourself, then run internally:
+
+   ```bash
+   python3 <skill-dir>/scripts/wiki_tool.py refresh-manifest --repo .
+   python3 <skill-dir>/scripts/wiki_tool.py doctor --repo .
+   ```
+
+Stop after the starter set is useful. Do not grow the wiki into a broad repo
+summary during this pass.
 
 ## Question Mode
 
@@ -240,8 +330,11 @@ Use this when `status` reports changed files that map to concept pages.
 
 2. Read the changed files and affected concept pages.
 3. Propose the smallest wiki edits that make those concept pages current.
-4. Ask before editing.
-5. After approval, update only affected wiki files and append `log.md`.
+4. If the user invoked update mode or asked to update the wiki, make those
+   minimal edits after listing the affected wiki files. If `/karpathy:wiki`
+   inferred update mode from repo state with no explicit update request, ask
+   before editing.
+5. Update only affected wiki files and append `log.md`.
 6. Re-run doctor or status.
 
 Do not rewrite unrelated wiki pages. If changed files do not map to concepts,
@@ -266,22 +359,30 @@ Report:
   mappings.
 - Clean checks.
 
-Ask before applying fixes. Favor minimal repair: fix a link, add a missing
-frontmatter field, refresh the manifest, or mark low-confidence content.
+Favor minimal repair: fix a link, add a missing frontmatter field, refresh the
+manifest, or mark low-confidence content. If the user explicitly asked for
+doctor fixes, apply minimal wiki-file repairs after listing them. Ask before
+larger semantic rewrites, Git hooks, or agent instruction edits.
 
 ## Examples
 
 - `/karpathy:wiki` in a repo with no wiki: setup mode. Explain the
-  `knowledge/` structure, ask approval, run `init`, run `scan`, then create a
-  small cited starter wiki.
+  `knowledge/` structure, run the helper internally, read high-signal sources,
+  then create a small cited starter wiki if setup was explicitly requested or
+  accepted.
+- `/karpathy:wiki` after `init` but before concept pages: starter concepts
+  mode. Say the scaffold is healthy but empty, propose 2-5 cited pages from
+  scan, write the accepted starter pages yourself, then refresh the manifest and
+  run doctor internally.
 - `/karpathy wiki add trial expiration handling`: task brief mode. Search the
   wiki, read cited source files, return likely files, invariants, risks, and
   verification commands with citations.
 - `karpathy wiki how does auth work?`: question mode. Search concepts, read
   resources, answer from wiki first and source second, with stale/thin warnings
   when needed.
-- `/karpathy:wiki` after a diff: update mode. Run `update-plan`, read only the
-  changed files and affected concepts, then ask before touching wiki pages.
+- `/karpathy:wiki` after a diff: update mode. Run `update-plan` internally,
+  read only the changed files and affected concepts, then make or propose the
+  smallest wiki edits depending on whether update intent was explicit.
 - `/karpathy:wiki doctor`: doctor mode. Report broken links, stale manifest,
   missing frontmatter, missing citations, and proposed minimal fixes.
 - `/karpathy:wiki auth`: ambiguous. If answering is safe and read-only, treat it

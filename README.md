@@ -418,6 +418,11 @@ The idea:
 This is meant to help vibe coders who want the agent to understand a project
 without manually writing and maintaining a big documentation site.
 
+The helper script is not part of the normal user workflow. The agent runs it
+internally for status, scan, search, doctor, and manifest refresh operations;
+users should not have to paste `python3 .../wiki_tool.py` commands into a
+terminal just to use the wiki.
+
 The shipped MVP includes:
 
 - A `knowledge/wiki/` scaffold with OKF-style Markdown files.
@@ -461,7 +466,8 @@ client rejects that as an invalid slash command, use `/karpathy:wiki`.
 
 | User Enters | Skill Interprets It As | Skill Returns |
 | --- | --- | --- |
-| `/karpathy:wiki` | No wiki exists | A setup prompt for `knowledge/wiki/`. |
+| `/karpathy:wiki` | No wiki exists | The agent creates a small cited starter wiki after setup is requested or accepted. |
+| `/karpathy:wiki` | Scaffold exists but no concepts are indexed | The agent proposes and writes 2-5 starter concepts from cited sources. |
 | `/karpathy:wiki add trial expiration handling` | Coding task | A task brief with files, risks, invariants, and tests. |
 | `/karpathy:wiki how does auth work?` | Repo question | A cited answer from the wiki and source files. |
 | `/karpathy:wiki` after code changes | Wiki update | A proposed update to only affected wiki pages. |
@@ -498,6 +504,25 @@ Commit is allowed. This reminder is advisory.
 
 For the full design, see
 [Repo Knowledge Bases for Coding Agents](docs/repo-knowledge-bases.html).
+
+### Dogfood Improvement Notes
+
+When `/karpathy:wiki` exposes friction in the skill itself, the agent can append
+a short local note to:
+
+```text
+knowledge/outputs/wiki-improvements.md
+```
+
+These notes are local by default. They are meant to capture reusable product
+lessons like confusing mode selection, noisy starter suggestions, awkward doctor
+output, or missing guardrails. Each entry should include the observation,
+evidence paths, and a concrete suggested skill change. They should not include
+secrets, personal data, raw transcripts, or large source excerpts, and the agent
+must never stage them automatically.
+
+If this skill gets broader usage, improvement notes should scale through an
+explicit export or issue-filing flow, not background telemetry.
 
 ---
 

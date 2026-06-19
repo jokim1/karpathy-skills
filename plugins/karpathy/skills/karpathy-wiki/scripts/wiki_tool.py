@@ -16,6 +16,7 @@ from typing import Any
 
 
 MANIFEST_NAME = ".karpathy-wiki.json"
+IMPROVEMENTS_PATH = Path("knowledge") / "outputs" / "wiki-improvements.md"
 MANAGED_HOOK_BEGIN = "# >>> karpathy-wiki stale reminder >>>"
 MANAGED_HOOK_END = "# <<< karpathy-wiki stale reminder <<<"
 CONCEPT_DIRS = {
@@ -132,6 +133,66 @@ def write_once(path: Path, content: str, force: bool = False) -> bool:
     path.parent.mkdir(parents=True, exist_ok=True)
     path.write_text(content, encoding="utf-8")
     return True
+
+
+def append_improvement_note(
+    repo: Path,
+    title: str,
+    body: str,
+    suggestion: str | None = None,
+    evidence: list[str] | None = None,
+    tags: list[str] | None = None,
+) -> dict[str, Any]:
+    path = repo / IMPROVEMENTS_PATH
+    path.parent.mkdir(parents=True, exist_ok=True)
+    timestamp = now_iso()
+    commit = run_git(repo, ["rev-parse", "--short", "HEAD"]) or "unknown"
+    clean_title = " ".join(title.strip().split()) or "Untitled improvement"
+    clean_body = body.strip() or "No details provided."
+    clean_suggestion = (suggestion or "").strip() or "Review this observation and decide whether it should become a skill, helper, docs, or test change."
+    clean_evidence = [item.strip() for item in evidence or [] if item.strip()]
+    clean_tags = [item.strip() for item in tags or [] if item.strip()]
+    header = ""
+    if not path.exists():
+        header = """# Karpathy Wiki Improvement Notes
+
+Local, append-only dogfood notes for improving the karpathy-wiki skill.
+
+- No telemetry or network upload is implied by this file.
+- Do not include secrets, personal data, raw transcripts, or large source excerpts.
+- Do not stage this file automatically.
+
+"""
+    tag_line = ", ".join(clean_tags) if clean_tags else "none"
+    evidence_block = "\n".join(f"- `{item}`" for item in clean_evidence) if clean_evidence else "- None"
+    entry = f"""## {timestamp} - {clean_title}
+
+- Source commit: `{commit}`
+- Tags: {tag_line}
+
+### Observation
+
+{clean_body}
+
+### Evidence
+
+{evidence_block}
+
+### Suggested Skill Change
+
+{clean_suggestion}
+
+"""
+    with path.open("a", encoding="utf-8") as handle:
+        handle.write(header + entry)
+    return {
+        "path": rel(repo, path),
+        "timestamp": timestamp,
+        "title": clean_title,
+        "suggestion": clean_suggestion,
+        "evidence": clean_evidence,
+        "tags": clean_tags,
+    }
 
 
 def parse_inline_list(value: str) -> list[str]:
@@ -381,6 +442,88 @@ def sorted_existing_files(repo: Path, names: list[str]) -> list[str]:
     return sorted(name for name in names if (repo / name).is_file())
 
 
+def slugify(value: str) -> str:
+    slug = re.sub(r"[^a-z0-9]+", "-", value.lower()).strip("-")
+    return slug or "concept"
+
+
+def starter_concept_candidates(repo: Path, scan: dict[str, Any] | None = None) -> list[dict[str, str]]:
+    data = scan or scan_repo(repo)
+    candidates: list[dict[str, str]] = []
+    entrypoints = data.get("source_entrypoints", [])
+    if entrypoints:
+        entrypoint = entrypoints[0]
+        stem = Path(entrypoint).stem.replace("-", " ").replace("_", " ")
+        if stem in {"main", "index", "app"}:
+            title = "App Boot"
+            filename = "app-boot"
+        else:
+            title = f"{stem.title()} Entry Point"
+            filename = slugify(title)
+        candidates.append(
+            {
+                "path": f"knowledge/wiki/components/{filename}.md",
+                "type": "Component",
+                "title": title,
+                "resource": entrypoint,
+                "reason": "Source entrypoint detected by scan.",
+            }
+        )
+
+    package_files = data.get("package_and_build_files", [])
+    known_commands = data.get("known_commands", [])
+    if known_commands:
+        package_resource = "package.json" if "package.json" in package_files else (package_files[0] if package_files else "")
+        candidates.append(
+            {
+                "path": "knowledge/wiki/tests/verification-surface.md",
+                "type": "Test Surface",
+                "title": "Verification Surface",
+                "resource": package_resource,
+                "reason": "Verification commands detected by scan.",
+            }
+        )
+
+    docs = data.get("docs", [])
+    migration_doc = (
+        next((path for path in docs if Path(path).name.lower() == "sql_migrations.md"), "")
+        or next((path for path in docs if "migration" in path.lower()), "")
+        or next((path for path in docs if "sql" in path.lower()), "")
+    )
+    if migration_doc:
+        candidates.append(
+            {
+                "path": "knowledge/wiki/invariants/sql-migrations.md",
+                "type": "Invariant",
+                "title": "SQL Migrations",
+                "resource": migration_doc,
+                "reason": "SQL or migration documentation detected by scan.",
+            }
+        )
+
+    readme = next((path for path in docs if Path(path).name.lower().startswith("readme")), "")
+    if readme:
+        candidates.append(
+            {
+                "path": "knowledge/wiki/workflows/local-development.md",
+                "type": "Workflow",
+                "title": "Local Development",
+                "resource": readme,
+                "reason": "README detected as high-signal setup documentation.",
+            }
+        )
+
+    seen: set[str] = set()
+    unique: list[dict[str, str]] = []
+    for candidate in candidates:
+        path = candidate["path"]
+        if path in seen:
+            continue
+        seen.add(path)
+        unique.append(candidate)
+    return unique[:5]
+
+
 def doc_files(repo: Path) -> list[str]:
     paths: set[str] = set()
     for path in repo.glob("README*"):
@@ -391,7 +534,21 @@ def doc_files(repo: Path) -> list[str]:
         for path in docs.rglob("*"):
             if path.is_file() and path.suffix.lower() in {".md", ".mdx", ".html", ".txt"}:
                 paths.add(rel(repo, path))
-    return sorted(paths)[:80]
+    priority_names = {
+        "architecture.md",
+        "contributing.md",
+        "mcp.md",
+        "sql_migrations.md",
+        "testing.md",
+    }
+    ordered = sorted(paths)
+    priority = [
+        path
+        for path in ordered
+        if Path(path).name.lower() in priority_names or path.lower().startswith("docs/public/")
+    ]
+    rest = [path for path in ordered if path not in set(priority)]
+    return [*priority, *rest][:80]
 
 
 def source_entrypoints(repo: Path) -> list[str]:
@@ -416,7 +573,7 @@ def scan_repo(repo: Path) -> dict[str, Any]:
     docs = doc_files(repo)
     source_dirs = sorted_existing_dirs(repo, SOURCE_DIR_NAMES)
     test_dirs = sorted_existing_dirs(repo, TEST_DIR_NAMES)
-    return {
+    data = {
         "repo": str(repo),
         "high_signal_files": high_signal_files(repo),
         "docs": docs,
@@ -431,6 +588,8 @@ def scan_repo(repo: Path) -> dict[str, Any]:
             "Summarize durable behavior; do not copy source files into wiki pages.",
         ],
     }
+    data["starter_candidates"] = starter_concept_candidates(repo, data)
+    return data
 
 
 def init_wiki(repo: Path, force: bool = False) -> dict[str, Any]:
@@ -528,17 +687,38 @@ source_commit: {commit}
     return {"created": created, "skipped": skipped, "manifest": manifest}
 
 
+def required_wiki_files(repo: Path) -> list[Path]:
+    return [wiki_dir(repo) / "index.md", wiki_dir(repo) / "log.md", manifest_path(repo)]
+
+
+def wiki_setup_state(repo: Path, concept_count: int) -> tuple[str, list[str]]:
+    if not wiki_dir(repo).exists():
+        return "missing", ["knowledge/wiki"]
+    missing = [rel(repo, path) for path in required_wiki_files(repo) if not path.exists()]
+    if missing:
+        return "incomplete-setup", missing
+    if concept_count == 0:
+        return "needs-starter-concepts", []
+    return "ready", []
+
+
 def status(repo: Path) -> dict[str, Any]:
     exists = wiki_dir(repo).exists()
     manifest = load_manifest(repo) if exists else {}
     changes = changed_paths(repo)
     affected = affected_concepts(repo, paths_for_scope(changes, "all"), manifest) if exists else {}
+    concept_count = len(manifest.get("concepts", [])) if exists else 0
+    setup_state, missing_required = wiki_setup_state(repo, concept_count)
+    starter_candidates = starter_concept_candidates(repo) if setup_state == "needs-starter-concepts" else []
     return {
         "repo": str(repo),
         "wiki_exists": exists,
         "wiki_root": "knowledge/wiki",
         "manifest_exists": manifest_path(repo).exists(),
-        "concept_count": len(manifest.get("concepts", [])) if exists else 0,
+        "setup_state": setup_state,
+        "missing_required_files": missing_required,
+        "concept_count": concept_count,
+        "starter_candidates": starter_candidates,
         "changed_paths": changes,
         "affected_concepts": affected,
         "source_commit": run_git(repo, ["rev-parse", "--short", "HEAD"]),
@@ -777,8 +957,21 @@ fi
 def print_text_status(data: dict[str, Any]) -> None:
     print(f"Repo: {data['repo']}")
     print(f"Wiki: {'present' if data['wiki_exists'] else 'missing'} ({data['wiki_root']})")
+    print(f"Setup state: {data.get('setup_state', 'unknown')}")
+    missing = data.get("missing_required_files", [])
+    if missing:
+        print("Missing required files:")
+        for path in missing:
+            print(f"- {path}")
     if data["wiki_exists"]:
         print(f"Concepts: {data['concept_count']}")
+        candidates = data.get("starter_candidates", [])
+        if candidates:
+            print("Starter concept candidates:")
+            for candidate in candidates:
+                resource = f" citing {candidate['resource']}" if candidate.get("resource") else ""
+                print(f"- {candidate['path']} ({candidate['type']}: {candidate['title']}){resource}")
+            print("Next: create 2-5 cited concept pages, then run refresh-manifest and doctor.")
         if data["affected_concepts"]:
             print("Affected concepts:")
             for concept, paths in data["affected_concepts"].items():
@@ -814,13 +1007,18 @@ def print_scan(data: dict[str, Any]) -> None:
         ("test_directories", "Test Directories"),
         ("package_and_build_files", "Package And Build Files"),
         ("known_commands", "Known Commands"),
+        ("starter_candidates", "Starter Concept Candidates"),
         ("guidance", "Guidance"),
     ]:
         print(f"\n## {title}")
         values = data.get(key, [])
         if values:
             for value in values:
-                print(f"- {value}")
+                if isinstance(value, dict):
+                    resource = f" citing {value['resource']}" if value.get("resource") else ""
+                    print(f"- {value['path']} ({value['type']}: {value['title']}){resource} - {value['reason']}")
+                else:
+                    print(f"- {value}")
         else:
             print("- None detected")
 
@@ -888,6 +1086,13 @@ def main() -> int:
     update_plan_parser.add_argument("--scope", choices=["staged", "unstaged", "untracked", "head", "all"], default="all")
     refresh_parser = sub.add_parser("refresh-manifest")
     add_common(refresh_parser)
+    improvement_parser = sub.add_parser("note-improvement")
+    add_common(improvement_parser)
+    improvement_parser.add_argument("--title", required=True)
+    improvement_parser.add_argument("--body", required=True)
+    improvement_parser.add_argument("--suggestion", default="")
+    improvement_parser.add_argument("--evidence", action="append", default=[])
+    improvement_parser.add_argument("--tag", action="append", default=[])
 
     args = parser.parse_args()
     repo = resolve_repo(getattr(args, "repo_after", None) or args.repo)
@@ -942,6 +1147,17 @@ def main() -> int:
     if args.command == "refresh-manifest":
         data = save_manifest(repo)
         print(json.dumps(data, indent=2, sort_keys=True) if json_output else f"Indexed {data['concept_count']} concept(s).")
+        return 0
+    if args.command == "note-improvement":
+        data = append_improvement_note(
+            repo,
+            args.title,
+            args.body,
+            suggestion=args.suggestion,
+            evidence=args.evidence,
+            tags=args.tag,
+        )
+        print(json.dumps(data, indent=2, sort_keys=True) if json_output else f"Appended {data['path']}")
         return 0
     return 1
 
