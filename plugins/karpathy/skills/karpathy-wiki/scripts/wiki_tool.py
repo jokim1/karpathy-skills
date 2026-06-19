@@ -50,6 +50,51 @@ PACKAGE_FILE_NAMES = [
 ]
 SOURCE_DIR_NAMES = ("src", "app", "lib", "packages", "plugins", "cmd", "internal", "server", "client")
 TEST_DIR_NAMES = ("tests", "test", "spec", "__tests__", "e2e")
+SOURCE_FILE_SUFFIXES = {
+    ".ts",
+    ".tsx",
+    ".js",
+    ".jsx",
+    ".py",
+    ".go",
+    ".rs",
+    ".rb",
+    ".java",
+    ".kt",
+    ".swift",
+    ".cs",
+    ".php",
+}
+IGNORED_SCAN_PARTS = {
+    ".git",
+    ".next",
+    ".nuxt",
+    ".svelte-kit",
+    "build",
+    "coverage",
+    "dist",
+    "node_modules",
+    "target",
+    "vendor",
+}
+FEATURE_BASE_DIRS = ("src/features", "features", "app/features")
+DOMAIN_SIGNAL_KEYWORDS = (
+    "api",
+    "bootstrap",
+    "cache",
+    "client",
+    "data",
+    "loader",
+    "mutation",
+    "queries",
+    "query",
+    "repository",
+    "route",
+    "schema",
+    "server",
+    "service",
+    "store",
+)
 
 
 @dataclass
@@ -445,6 +490,460 @@ def sorted_existing_files(repo: Path, names: list[str]) -> list[str]:
 def slugify(value: str) -> str:
     slug = re.sub(r"[^a-z0-9]+", "-", value.lower()).strip("-")
     return slug or "concept"
+
+
+def humanize_name(value: str) -> str:
+    parts = [part for part in re.split(r"[^A-Za-z0-9]+", value) if part]
+    words: list[str] = []
+    for part in parts:
+        lower = part.lower()
+        if lower in {"ai", "api", "cli", "mcp", "sql", "ui"}:
+            words.append(lower.upper())
+        else:
+            words.append(lower.capitalize())
+    return " ".join(words) or "Concept"
+
+
+def singularize(value: str) -> str:
+    if value.endswith("ies") and len(value) > 4:
+        return value[:-3] + "y"
+    if value.endswith("s") and not value.endswith("ss") and len(value) > 3:
+        return value[:-1]
+    return value
+
+
+def first_existing_file(repo: Path, candidates: list[str]) -> str:
+    for candidate in candidates:
+        path = normalize_repo_path(candidate)
+        if (repo / path).is_file():
+            return path
+    return ""
+
+
+def first_existing_dir(repo: Path, candidates: list[str]) -> str:
+    for candidate in candidates:
+        path = normalize_repo_path(candidate)
+        if (repo / path).is_dir():
+            return path
+    return ""
+
+
+def unique_existing_paths(repo: Path, paths: list[str], limit: int | None = None) -> list[str]:
+    unique: list[str] = []
+    seen: set[str] = set()
+    for path in paths:
+        normalized = normalize_repo_path(path)
+        if not normalized or normalized in seen or not (repo / normalized).exists():
+            continue
+        seen.add(normalized)
+        unique.append(normalized)
+        if limit is not None and len(unique) >= limit:
+            break
+    return unique
+
+
+def scan_path_is_ignored(path: str) -> bool:
+    return any(part in IGNORED_SCAN_PARTS for part in Path(path).parts)
+
+
+def source_files_under(repo: Path, resource: str, limit: int = 80) -> list[str]:
+    normalized = normalize_repo_path(resource)
+    path = repo / normalized
+    if path.is_file():
+        return [normalized]
+    if not path.is_dir():
+        return []
+    files: list[str] = []
+    for child in path.rglob("*"):
+        if not child.is_file() or child.suffix.lower() not in SOURCE_FILE_SUFFIXES:
+            continue
+        relative = rel(repo, child)
+        if scan_path_is_ignored(relative):
+            continue
+        files.append(relative)
+    return sorted(files)[:limit]
+
+
+def key_files_for_resource(repo: Path, resource: str, keywords: list[str], limit: int = 8) -> list[str]:
+    normalized = normalize_repo_path(resource)
+    path = repo / normalized
+    if path.is_file():
+        return [normalized]
+    files = source_files_under(repo, normalized, limit=160)
+    scored: list[tuple[int, int, str]] = []
+    for file in files:
+        lower_path = file.lower()
+        name = Path(file).name.lower()
+        score = 0
+        for keyword in keywords:
+            keyword = keyword.lower()
+            if keyword in name:
+                score += 3
+            elif keyword in lower_path:
+                score += 1
+        if score:
+            scored.append((score, len(file), file))
+    if scored:
+        scored.sort(key=lambda item: (-item[0], item[1], item[2]))
+        return [file for _, _, file in scored[:limit]]
+    return files[: min(limit, 5)]
+
+
+def feature_directories(repo: Path) -> list[str]:
+    directories: list[str] = []
+    for base in FEATURE_BASE_DIRS:
+        root = repo / base
+        if not root.is_dir():
+            continue
+        for child in sorted(root.iterdir(), key=lambda item: item.name):
+            if child.is_dir() and not child.name.startswith(".") and not scan_path_is_ignored(rel(repo, child)):
+                directories.append(rel(repo, child))
+    return directories
+
+
+def feature_signal_score(files: list[str]) -> tuple[int, list[str]]:
+    matched: set[str] = set()
+    score = 0
+    for file in files:
+        lower = file.lower()
+        for keyword in DOMAIN_SIGNAL_KEYWORDS:
+            if keyword in lower:
+                matched.add(keyword)
+                score += 2 if keyword in {"bootstrap", "queries", "repository", "service", "store"} else 1
+    return score, sorted(matched)
+
+
+def concept_plan_candidate(
+    repo: Path,
+    path: str,
+    concept_type: str,
+    title: str,
+    resource: str,
+    reason: str,
+    read: list[str] | None = None,
+    questions: list[str] | None = None,
+    priority: int = 100,
+    stage: str = "starter",
+) -> dict[str, Any]:
+    normalized_resource = normalize_repo_path(resource) if resource else ""
+    read_paths = unique_existing_paths(repo, read or [], limit=10)
+    if not read_paths and normalized_resource:
+        read_paths = key_files_for_resource(repo, normalized_resource, list(DOMAIN_SIGNAL_KEYWORDS), limit=8)
+    return {
+        "path": normalize_repo_path(path),
+        "type": concept_type,
+        "title": title,
+        "resource": normalized_resource,
+        "reason": reason,
+        "read": read_paths,
+        "questions": questions or [],
+        "priority": priority,
+        "stage": stage,
+    }
+
+
+def starter_candidate_as_plan(repo: Path, candidate: dict[str, str], priority: int) -> dict[str, Any]:
+    resource = candidate.get("resource", "")
+    concept_type = candidate.get("type", "")
+    keywords = list(DOMAIN_SIGNAL_KEYWORDS)
+    questions = [
+        "What does this concept own?",
+        "Which files should future agents read before editing it?",
+        "What invariants or verification commands matter for changes here?",
+    ]
+    read: list[str] = []
+    if concept_type == "Test Surface":
+        read = unique_existing_paths(repo, [resource, *PACKAGE_FILE_NAMES], limit=8)
+        keywords = ["test", "typecheck", "lint", "build", "script"]
+        questions = [
+            "Which commands are the default smoke checks?",
+            "Which checks are expensive or environment-dependent?",
+            "Which files define the verification scripts?",
+        ]
+    elif concept_type == "Invariant":
+        keywords = ["migration", "sql", "schema", "database"]
+        questions = [
+            "What rule must future code changes preserve?",
+            "Where is the rule documented or enforced?",
+            "What mistake should agents avoid?",
+        ]
+    elif concept_type == "Workflow":
+        keywords = ["readme", "setup", "dev", "local", "environment"]
+        questions = [
+            "What is the shortest local setup path?",
+            "What commands are required before coding?",
+            "What assumptions are environment-specific?",
+        ]
+    if not read and resource:
+        read = key_files_for_resource(repo, resource, keywords, limit=8)
+    return concept_plan_candidate(
+        repo,
+        candidate.get("path", ""),
+        concept_type,
+        candidate.get("title", ""),
+        resource,
+        candidate.get("reason", ""),
+        read=read,
+        questions=questions,
+        priority=priority,
+        stage="starter",
+    )
+
+
+def auth_session_candidate(repo: Path) -> dict[str, Any] | None:
+    root = first_existing_dir(
+        repo,
+        [
+            "src/features/auth",
+            "src/auth",
+            "app/auth",
+            "lib/auth",
+            "server/auth",
+            "packages/auth/src",
+        ],
+    )
+    if not root:
+        return None
+    read = key_files_for_resource(
+        repo,
+        root,
+        ["auth", "session", "login", "redirect", "repository", "data", "provider", "sync", "route"],
+        limit=10,
+    )
+    return concept_plan_candidate(
+        repo,
+        "knowledge/wiki/components/auth-session.md",
+        "Component",
+        "Auth Session",
+        root,
+        "Auth feature directory detected; session and redirect behavior is usually high-risk for agents.",
+        read=read,
+        questions=[
+            "Where is the session loaded, refreshed, or persisted?",
+            "How are unauthenticated users redirected?",
+            "Which files own auth data access versus UI/provider wiring?",
+        ],
+        priority=20,
+    )
+
+
+def routing_shell_candidate(repo: Path) -> dict[str, Any] | None:
+    routing_file = first_existing_file(
+        repo,
+        [
+            "src/app/router.tsx",
+            "src/app/router.ts",
+            "src/routes.tsx",
+            "src/routes.ts",
+            "app/router.tsx",
+            "app/router.ts",
+            "app/routes.tsx",
+            "app/routes.ts",
+        ],
+    )
+    shell_dir = first_existing_dir(repo, ["src/features/shell", "src/app", "app"])
+    if not routing_file and not shell_dir:
+        return None
+    resource = routing_file or shell_dir
+    read = unique_existing_paths(repo, [routing_file], limit=2)
+    if shell_dir:
+        read.extend(
+            path
+            for path in key_files_for_resource(
+                repo,
+                shell_dir,
+                ["router", "route", "shell", "layout", "nav", "sidebar"],
+                limit=8,
+            )
+            if path not in read
+        )
+    return concept_plan_candidate(
+        repo,
+        "knowledge/wiki/components/app-routing-and-shell.md",
+        "Component",
+        "App Routing And Shell",
+        resource,
+        "Routing or app shell files detected; route/provider wiring is a common orientation target.",
+        read=read,
+        questions=[
+            "Where are top-level routes declared?",
+            "Which shell/layout components wrap authenticated or project views?",
+            "What route changes require provider, cache, or navigation updates?",
+        ],
+        priority=30,
+    )
+
+
+def mcp_server_candidate(repo: Path, docs: list[str]) -> dict[str, Any] | None:
+    root = first_existing_dir(
+        repo,
+        [
+            "packages/mcp-server/src",
+            "packages/mcp/src",
+            "mcp-server/src",
+            "src/mcp",
+            "server/mcp",
+        ],
+    )
+    doc = next((path for path in docs if "mcp" in path.lower()), "")
+    if not root and not doc:
+        return None
+    resource = root or doc
+    read = []
+    if root:
+        read.extend(
+            key_files_for_resource(
+                repo,
+                root,
+                ["server", "service", "tool", "schema", "cli", "hosted", "http", "transport"],
+                limit=10,
+            )
+        )
+    read.extend(path for path in unique_existing_paths(repo, [doc], limit=1) if path not in read)
+    return concept_plan_candidate(
+        repo,
+        "knowledge/wiki/components/mcp-server.md",
+        "Component",
+        "MCP Server",
+        resource,
+        "MCP package or documentation detected; tool routing and schemas need explicit citations.",
+        read=read,
+        questions=[
+            "Where are MCP tools registered and dispatched?",
+            "Which schemas define valid tool inputs?",
+            "How should ambiguous tool matches or transport failures be debugged?",
+        ],
+        priority=45,
+    )
+
+
+def feature_domain_candidates(repo: Path, limit: int = 3) -> list[dict[str, Any]]:
+    skip_names = {"app", "auth", "common", "components", "layout", "shared", "shell", "ui"}
+    scored: list[tuple[int, str, list[str], list[str]]] = []
+    for directory in feature_directories(repo):
+        name = Path(directory).name
+        if name in skip_names:
+            continue
+        files = source_files_under(repo, directory, limit=160)
+        score, markers = feature_signal_score(files)
+        if score < 4:
+            continue
+        scored.append((score, directory, markers, files))
+    scored.sort(key=lambda item: (-item[0], item[1]))
+
+    candidates: list[dict[str, Any]] = []
+    for offset, (_, directory, markers, files) in enumerate(scored[:limit]):
+        name = Path(directory).name
+        if name == "projects" and any("project-shell" in file.lower() for file in files):
+            title = "Project Shell Data"
+            filename = "project-shell-data"
+        else:
+            label = humanize_name(singularize(name))
+            title = f"{label} Data Flow"
+            filename = f"{slugify(label)}-data-flow"
+        read = key_files_for_resource(repo, directory, list(DOMAIN_SIGNAL_KEYWORDS), limit=10)
+        marker_text = ", ".join(markers[:5]) if markers else "data-flow"
+        candidates.append(
+            concept_plan_candidate(
+                repo,
+                f"knowledge/wiki/components/{filename}.md",
+                "Component",
+                title,
+                directory,
+                f"Feature directory has durable data-flow signals: {marker_text}.",
+                read=read,
+                questions=[
+                    "Which files load, cache, mutate, or bootstrap this domain?",
+                    "What should future agents update when changing this domain?",
+                    "Which tests or verification commands cover the domain flow?",
+                ],
+                priority=40 + offset,
+            )
+        )
+    return candidates
+
+
+def smoke_test_recipe_candidate(repo: Path) -> dict[str, Any] | None:
+    if not wiki_dir(repo).exists():
+        return None
+    read = unique_existing_paths(
+        repo,
+        [
+            "knowledge/wiki/index.md",
+            "knowledge/wiki/.karpathy-wiki.json",
+            "knowledge/wiki/log.md",
+        ],
+        limit=5,
+    )
+    if not read:
+        return None
+    return concept_plan_candidate(
+        repo,
+        "knowledge/wiki/recipes/karpathy-wiki-smoke-test.md",
+        "Task Recipe",
+        "Karpathy Wiki Smoke Test",
+        "knowledge/wiki/index.md",
+        "Wiki scaffold detected; a small smoke recipe makes future dogfood checks repeatable.",
+        read=read,
+        questions=[
+            "Which search queries should prove the wiki can answer real repo questions?",
+            "Which doctor and manifest commands should stay clean?",
+            "What result indicates the wiki is still too thin?",
+        ],
+        priority=70,
+        stage="follow-up",
+    )
+
+
+def concept_plan(repo: Path, limit: int = 8, scan: dict[str, Any] | None = None) -> dict[str, Any]:
+    data = scan or scan_repo(repo)
+    candidates: list[dict[str, Any]] = []
+
+    starter_priorities = {
+        "knowledge/wiki/components/app-boot.md": 10,
+        "knowledge/wiki/tests/verification-surface.md": 50,
+        "knowledge/wiki/invariants/sql-migrations.md": 60,
+        "knowledge/wiki/workflows/local-development.md": 90,
+    }
+    for starter in data.get("starter_candidates", []):
+        priority = starter_priorities.get(starter.get("path", ""), 65)
+        candidates.append(starter_candidate_as_plan(repo, starter, priority))
+
+    for candidate in [
+        auth_session_candidate(repo),
+        routing_shell_candidate(repo),
+        *feature_domain_candidates(repo),
+        mcp_server_candidate(repo, data.get("docs", [])),
+        smoke_test_recipe_candidate(repo),
+    ]:
+        if candidate:
+            candidates.append(candidate)
+
+    seen: set[str] = set()
+    unique: list[dict[str, Any]] = []
+    existing_paths = {rel(repo, path) for path in concept_files(repo)}
+    for candidate in sorted(candidates, key=lambda item: (item["priority"], item["path"])):
+        path = candidate["path"]
+        if not path or path in seen or path in existing_paths or (repo / path).exists():
+            continue
+        seen.add(path)
+        unique.append(candidate)
+
+    concept_count = len(concept_files(repo)) if wiki_dir(repo).exists() else 0
+    setup_state, _ = wiki_setup_state(repo, concept_count)
+    return {
+        "repo": str(repo),
+        "wiki_root": "knowledge/wiki",
+        "setup_state": setup_state,
+        "candidate_count": len(unique[:limit]),
+        "candidates": unique[:limit],
+        "guidance": [
+            "Use these as a ranked plan, not as generated content.",
+            "Read each candidate's read list before writing a concept page.",
+            "Create only the smallest set that answers near-term repo questions.",
+            "Every implementation-relevant claim still needs a source citation.",
+        ],
+    }
 
 
 def starter_concept_candidates(repo: Path, scan: dict[str, Any] | None = None) -> list[dict[str, str]]:
@@ -1023,6 +1522,29 @@ def print_scan(data: dict[str, Any]) -> None:
             print("- None detected")
 
 
+def print_concept_plan(data: dict[str, Any]) -> None:
+    print("# Karpathy Wiki Concept Plan")
+    print(f"Repo: {data['repo']}")
+    print(f"Setup state: {data.get('setup_state', 'unknown')}")
+    candidates = data.get("candidates", [])
+    print("\n## Candidates")
+    if candidates:
+        for candidate in candidates:
+            resource = f" citing {candidate['resource']}" if candidate.get("resource") else ""
+            print(f"- {candidate['path']} ({candidate['type']}: {candidate['title']}){resource}")
+            print(f"  reason: {candidate['reason']}")
+            reads = candidate.get("read", [])
+            if reads:
+                print("  read: " + ", ".join(reads))
+    else:
+        print("- None detected")
+    guidance = data.get("guidance", [])
+    if guidance:
+        print("\n## Guidance")
+        for item in guidance:
+            print(f"- {item}")
+
+
 def print_affected(data: dict[str, Any]) -> None:
     print("# Karpathy Wiki Update Plan")
     print(f"Scope: {data['scope']}")
@@ -1063,6 +1585,9 @@ def main() -> int:
     add_common(status_parser)
     scan_parser = sub.add_parser("scan")
     add_common(scan_parser)
+    concept_plan_parser = sub.add_parser("concept-plan")
+    add_common(concept_plan_parser)
+    concept_plan_parser.add_argument("--limit", type=int, default=8)
     init_parser = sub.add_parser("init")
     add_common(init_parser)
     init_parser.add_argument("--force", action="store_true")
@@ -1111,6 +1636,13 @@ def main() -> int:
             print(json.dumps(data, indent=2, sort_keys=True))
         else:
             print_scan(data)
+        return 0
+    if args.command == "concept-plan":
+        data = concept_plan(repo, limit=args.limit)
+        if json_output:
+            print(json.dumps(data, indent=2, sort_keys=True))
+        else:
+            print_concept_plan(data)
         return 0
     if args.command == "init":
         data = init_wiki(repo, force=args.force)

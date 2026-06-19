@@ -68,6 +68,12 @@ class WikiToolTests(unittest.TestCase):
         )
         return path
 
+    def write_source(self, relative_path, body="export const value = true;\n"):
+        path = self.repo / relative_path
+        path.parent.mkdir(parents=True, exist_ok=True)
+        path.write_text(body, encoding="utf-8")
+        return path
+
     def test_init_creates_structure_and_does_not_overwrite_existing_files(self):
         first = wiki_tool.init_wiki(self.repo)
         self.assertTrue((self.repo / "knowledge" / "wiki" / "index.md").exists())
@@ -113,6 +119,68 @@ class WikiToolTests(unittest.TestCase):
         candidate_paths = [candidate["path"] for candidate in result["starter_candidates"]]
         self.assertIn("knowledge/wiki/components/app-boot.md", candidate_paths)
         self.assertIn("knowledge/wiki/tests/verification-surface.md", candidate_paths)
+
+    def test_concept_plan_detects_high_value_repo_areas(self):
+        self.write_source("src/main.tsx")
+        self.write_source("src/app/router.tsx")
+        self.write_source("src/features/shell/project-shell.tsx")
+        self.write_source("src/features/auth/data.ts")
+        self.write_source("src/features/auth/session.repository.ts")
+        self.write_source("src/features/auth/AuthSessionSync.tsx")
+        self.write_source("src/features/projects/project-shell.queries.ts")
+        self.write_source("src/features/projects/project-shell.repository.ts")
+        self.write_source("src/features/projects/project-shell.bootstrap.ts")
+        self.write_source("packages/mcp-server/src/server.ts")
+        self.write_source("packages/mcp-server/src/service.ts")
+        self.write_source("packages/mcp-server/src/tool-schemas.ts")
+        (self.repo / "docs" / "public").mkdir(parents=True)
+        (self.repo / "docs" / "public" / "MCP.md").write_text("# MCP\n", encoding="utf-8")
+        (self.repo / "docs" / "public" / "SQL_MIGRATIONS.md").write_text("# SQL migrations\n", encoding="utf-8")
+        (self.repo / "package.json").write_text(
+            '{"scripts":{"test":"vitest run","typecheck":"tsc --noEmit","build":"vite build"}}\n',
+            encoding="utf-8",
+        )
+        wiki_tool.init_wiki(self.repo)
+
+        plan = wiki_tool.concept_plan(self.repo, limit=10)
+        by_path = {candidate["path"]: candidate for candidate in plan["candidates"]}
+
+        self.assertIn("knowledge/wiki/components/app-boot.md", by_path)
+        self.assertIn("knowledge/wiki/components/auth-session.md", by_path)
+        self.assertIn("knowledge/wiki/components/app-routing-and-shell.md", by_path)
+        self.assertIn("knowledge/wiki/components/project-shell-data.md", by_path)
+        self.assertIn("knowledge/wiki/components/mcp-server.md", by_path)
+        self.assertIn("knowledge/wiki/tests/verification-surface.md", by_path)
+        self.assertIn("knowledge/wiki/invariants/sql-migrations.md", by_path)
+        self.assertIn("knowledge/wiki/recipes/karpathy-wiki-smoke-test.md", by_path)
+        self.assertIn("src/features/auth/session.repository.ts", by_path["knowledge/wiki/components/auth-session.md"]["read"])
+        self.assertIn("src/app/router.tsx", by_path["knowledge/wiki/components/app-routing-and-shell.md"]["read"])
+        self.assertIn(
+            "src/features/projects/project-shell.repository.ts",
+            by_path["knowledge/wiki/components/project-shell-data.md"]["read"],
+        )
+        self.assertIn("packages/mcp-server/src/tool-schemas.ts", by_path["knowledge/wiki/components/mcp-server.md"]["read"])
+
+    def test_concept_plan_cli_outputs_json_candidates(self):
+        self.write_source("src/features/auth/session.repository.ts")
+        wiki_tool.init_wiki(self.repo)
+
+        result = run(
+            [
+                sys.executable,
+                str(SCRIPT),
+                "concept-plan",
+                "--repo",
+                str(self.repo),
+                "--json",
+                "--limit",
+                "3",
+            ],
+            self.repo,
+        )
+
+        self.assertIn('"candidates"', result.stdout)
+        self.assertIn("knowledge/wiki/components/auth-session.md", result.stdout)
 
     def test_status_reports_ready_when_concepts_exist(self):
         wiki_tool.init_wiki(self.repo)

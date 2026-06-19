@@ -23,6 +23,13 @@ class WikiSkillContractTests(unittest.TestCase):
         self.assertIn("Do not ask the user to paste concept pages into an editor", text)
         self.assertIn("write the pages yourself", text)
 
+    def test_skill_uses_concept_plan_before_starter_pages(self):
+        text = SKILL.read_text(encoding="utf-8")
+
+        self.assertIn("concept-plan --repo . --json", text)
+        self.assertIn("Read each chosen candidate's `read` files", text)
+        self.assertIn("Do not create every candidate", text)
+
     def test_skill_keeps_improvement_notes_local(self):
         text = SKILL.read_text(encoding="utf-8")
 

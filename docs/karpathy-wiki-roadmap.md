@@ -56,6 +56,20 @@ Product finding:
   internally, read cited sources, write starter pages itself after setup/update
   intent is clear, and report verification results.
 
+Second dogfood finding:
+
+- The initial three pages made the wiki valid, but not yet very useful for
+  Rocketboard work. The useful follow-up pages were auth/session,
+  routing/shell, project data flow, MCP server behavior, and a repeatable wiki
+  smoke-test recipe.
+- This should not become Rocketboard-specific hard-coding. The long-term fix is
+  a deterministic concept planner that detects source-shape signals like
+  feature directories, routing files, integration packages, verification
+  commands, and docs, then gives the agent a ranked candidate list with source
+  files to read before writing wiki pages.
+- The agent remains responsible for semantic content and citations. The helper
+  should plan what to inspect, not pretend it understands the code by itself.
+
 ### Benchmarking
 
 Add a wiki orientation benchmark.
@@ -80,7 +94,8 @@ Useful metrics:
 
 ### Better Compile Behavior
 
-The helper can scan the repo, but the LLM still writes the starter wiki.
+The helper can scan the repo and propose a deterministic concept plan, but the
+LLM still writes the starter wiki.
 
 Improve templates, examples, and instructions so the first generated wiki is
 consistently:

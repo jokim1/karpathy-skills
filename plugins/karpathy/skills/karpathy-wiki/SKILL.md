@@ -181,17 +181,18 @@ Mode precedence:
 
 3. Read the repo's high-signal files: `README*`, package/build config, docs,
    tests, and obvious source entry points.
-   Start with the read-only scan helper:
+   Start with the read-only scan and concept-plan helpers:
 
    ```bash
    python3 <skill-dir>/scripts/wiki_tool.py scan --repo . --json
+   python3 <skill-dir>/scripts/wiki_tool.py concept-plan --repo . --json
    ```
 
 4. Create only a small starter wiki in the same flow:
    - `knowledge/wiki/index.md` with repo overview, known commands, and links.
    - `knowledge/wiki/log.md` with the setup entry.
-   - 2-5 concept pages max, only when they can be cited to specific source or
-     docs.
+   - 2-5 concept pages max, chosen from the concept plan only after reading
+     the candidate `read` files.
    - A verification surface page when commands are discoverable.
    Every implementation-relevant claim must cite a source file or repo doc.
 5. Run `refresh-manifest` and `doctor` internally. Report whether doctor is
@@ -241,17 +242,25 @@ scaffold is healthy, but the wiki is not useful yet.
 
    ```bash
    python3 <skill-dir>/scripts/wiki_tool.py scan --repo . --json
+   python3 <skill-dir>/scripts/wiki_tool.py concept-plan --repo . --json
    ```
 
-2. Use `starter_candidates` as concrete options, not as a mandate. Read the
-   candidate resources before writing claims.
+2. Use `concept-plan` candidates as concrete options, not as generated content
+   or a mandate. Read each chosen candidate's `read` files before writing
+   claims. Use `starter_candidates` only as the simpler fallback when the
+   concept plan finds nothing useful.
 3. Propose 2-5 small concept pages. Prefer:
    - one component page for the app/server entrypoint when detected
+   - one high-value auth/session, routing/shell, domain data-flow, or
+     integration/server page when the repo shape supports it
    - one test surface page when verification commands are detected
    - one invariant/workflow page only when a cited doc supports it
+   - one repeatable smoke-test recipe only after the first useful concept pages
+     exist or are being created in the same pass
 4. If the user explicitly asked for setup or starter concepts, create only the
    proposed pages after briefly listing them. If the intent is ambiguous, ask
-   whether to create the starter concepts.
+   whether to create the starter concepts. Do not create every candidate in the
+   plan just because it was detected.
 5. Create the agreed concept pages yourself, then run internally:
 
    ```bash

@@ -428,13 +428,20 @@ The shipped MVP includes:
 - A `knowledge/wiki/` scaffold with OKF-style Markdown files.
 - A generated wiki manifest at `knowledge/wiki/.karpathy-wiki.json`.
 - A deterministic helper for status, search, doctor checks, manifest refresh,
-  repo scans, affected-concept plans, and advisory stale reminders.
+  repo scans, starter concept plans, affected-concept plans, and advisory stale
+  reminders.
 - A skill workflow that tells the agent how to create starter concepts, answer
   questions, write task briefs, and update only affected wiki pages.
 
 The MVP does **not** include a hosted service, embeddings, a graph database, or
 fully automatic semantic repo understanding. The agent still has to read source
 files and cite them.
+
+The starter concept planner is deliberately deterministic. It can detect
+high-value repo areas such as app boot, auth/session, routing/shell, domain
+data flows, integration servers, verification commands, and documented
+invariants, then return source files the agent should read before writing wiki
+pages. It does not generate semantic claims by itself.
 
 ### Why The Command Is Simple
 
