@@ -1,357 +1,670 @@
 # karpathy-skills
 
-A Claude Code plugin marketplace for working better with LLM coding agents,
-derived from [Andrej Karpathy's publicly stated observations][karpathy-post]
-on where coding agents go wrong.
+Karpathy Skills turns Andrej Karpathy-inspired AI coding practices into
+practical skills that vibe coders can use inside Claude Code and Codex.
 
-Currently ships one plugin: **karpathy**, with two tools —
-[`/karpathy:audit`](#karpathyaudit--review-your-instruction-file) for your agent
-instruction files and [`/karpathy:diff`](#karpathydiff--review-a-change-before-you-commit)
-for the code changes an agent produces.
+The goal is simple: when an AI agent writes code for you, these skills help you
+catch the common failure modes before they turn into bugs, bloated code, or
+messy commits.
+
+This repo currently ships one plugin, `karpathy`, with two implemented skills:
+
+- `/karpathy:audit` - reviews your AI agent instruction files.
+- `/karpathy:diff` - reviews AI-generated code changes before you commit.
+
+It also documents the planned third skill:
+
+- `/karpathy:wiki` - a repo wiki / memory layer for helping agents understand
+  the codebase before they edit it.
+
+The wiki skill is designed in detail in
+[docs/repo-knowledge-bases.html](docs/repo-knowledge-bases.html), but it is not
+implemented in the plugin yet.
 
 ---
 
-## Background: what Karpathy observed
+## Why This Exists
 
-In January 2026, after an extended stretch of agentic coding, Andrej Karpathy
-posted a set of observations on how LLM coding agents fail. Excerpts from
-[that post][karpathy-post]:
+Vibe coding is powerful, but AI coding agents have predictable failure modes:
 
-> "The models make wrong assumptions on your behalf and just run along with
-> them without checking. They don't manage their confusion, don't seek
-> clarifications, don't surface inconsistencies, don't present tradeoffs, don't
-> push back when they should."
+- They make assumptions without telling you.
+- They overbuild simple requests.
+- They refactor or reformat unrelated code.
+- They delete comments or code they do not fully understand.
+- They finish without a clear test or verification step.
 
-> "They really like to overcomplicate code and APIs, bloat abstractions, don't
-> clean up dead code... implement a bloated construction over 1000 lines when
-> 100 would do."
+Karpathy described these problems after extensive agentic coding. This project
+turns those observations into concrete workflows that an agent can run for you.
 
-> "They still sometimes change/remove comments and code they don't sufficiently
-> understand as side effects, even if orthogonal to the task."
+The four principles behind the plugin are:
 
-> "LLMs are exceptionally good at looping until they meet specific goals... Don't
-> tell it what to do, give it success criteria and watch it go."
-
-Four failure modes, and their fixes, fall out of that:
-
-| Failure mode | Principle |
+| Principle | Plain-English Meaning |
 | --- | --- |
-| Silent assumptions, hidden confusion | **Think Before Coding** |
-| Overcomplication, bloated abstractions | **Simplicity First** |
-| Collateral edits to unrelated code | **Surgical Changes** |
-| No verifiable definition of done | **Goal-Driven Execution** |
-
-### The four principles
-
-1. **Think Before Coding** — state assumptions, ask when ambiguous, surface
-   tradeoffs, never silently pick one interpretation.
-2. **Simplicity First** — write the minimum that solves the problem; no
-   speculative abstractions or unrequested features.
-3. **Surgical Changes** — touch only what the task requires; no drive-by
-   refactors.
-4. **Goal-Driven Execution** — define verifiable success criteria up front,
-   then loop until they pass.
+| Think Before Coding | Do not silently guess. State assumptions, ask when unclear, and surface tradeoffs. |
+| Simplicity First | Write the smallest thing that solves the real task. No speculative abstractions. |
+| Surgical Changes | Touch only what the task requires. No drive-by cleanup or unrelated rewrites. |
+| Goal-Driven Execution | Define how success will be checked, then run the checks. |
 
 ---
 
-## The `karpathy` plugin
+## The Skills
 
-The principles are easy to nod along to and hard to actually hold an agent to.
-This plugin operationalizes them at the two points where they matter, with one
-tool each:
+| Skill | Status | What It Is | What It Is For | Impact |
+| --- | --- | --- | --- | --- |
+| `/karpathy:audit` | Shipped | A review of your `CLAUDE.md`, `AGENTS.md`, or Cursor rules. | Making sure your agent instructions are clear, current, and useful. | Better standing instructions, fewer vague rules, less stale context. |
+| `/karpathy:diff` | Shipped | A review of the code changes an AI agent just made. | Catching scope creep before you commit. | Smaller diffs, fewer surprise edits, safer commits. |
+| `/karpathy:wiki` | Designed, not shipped yet | A local repo wiki that the agent maintains and reads before coding. | Helping the agent understand your project without rereading everything every time. | Faster orientation, better task briefs, less repeated context work. |
 
-- **`/karpathy:audit`** works on your *instruction file* — the `CLAUDE.md` that
-  shapes how the agent behaves. A setup-and-hygiene tool.
-- **`/karpathy:diff`** works on the *code changes* the agent produces — before
-  you commit them. A use-it-every-change tool.
+If you only remember one thing:
 
-Both follow the same contract: they report findings with severity, say what's
-already good, propose a concrete fix, and **stop** — neither changes anything
-without your approval.
-
----
-
-### `/karpathy:audit` — review your instruction file
-
-An agent instruction file — `CLAUDE.md`, `AGENTS.md`, a Cursor rule — is itself
-something an LLM reads on **every turn**. The same failure modes Karpathy
-describes in *generated code* show up in the instruction file just as easily:
-it bloats with generic advice, goes stale, contradicts itself, gives
-instructions too vague to act on.
-
-`/karpathy:audit` audits that file along two axes:
-
-- **Coverage** — does the file actually instruct the agent to follow the four
-  principles? Each is scored Present / Partial / Missing. Behavioral principles
-  often belong in a *global* `~/.claude/CLAUDE.md` rather than every project
-  file, so a project file scoring low is flagged, not condemned.
-- **Quality** — judged *by those same four principles*, is the file itself a
-  good artifact? This turns the principles back on the instruction file and
-  treats it the way you'd treat code.
-
-The quality audit applies five lenses:
-
-| Lens | What it flags |
-| --- | --- |
-| **Simplicity** | Generic advice that restates default model behavior; duplication; a roadmap or changelog living in an every-turn file. |
-| **Staleness** | "currently", "for now", "TODO", phase numbers, PR references — content correct today and misleading next month. |
-| **Ambiguity** | Instructions the agent can't act on or self-check, like "handle errors appropriately". |
-| **Verifiability** | Whether the file names the test / lint / build commands — without them, Goal-Driven Execution is impossible. |
-| **Consistency** | Rules that contradict each other, including *latent* contradictions with the four principles. |
-
-It deliberately does **not** flag legitimate project context — architecture
-maps, key-file tables, build commands.
-
-#### When and how often to run it
-
-`/karpathy:audit` is a **hygiene tool, not a daily one**. Run it:
-
-- **On adoption** — when you first install this plugin on a project, or first
-  write a `CLAUDE.md`.
-- **After substantial edits** to the `CLAUDE.md` / `AGENTS.md`.
-- **On a cadence — roughly monthly.** Instruction files rot: shipped roadmap
-  items, stale "current sprint" notes, dead PR numbers. A periodic audit is
-  what the *Staleness* lens exists to catch.
-- **When the agent starts misbehaving** — making silent assumptions,
-  over-building, ignoring conventions. The instruction file is often the cause;
-  audit it before blaming the model.
-- **Before onboarding someone** to the repo — the `CLAUDE.md` is onboarding
-  document number one.
-
-Running it more often than that is overkill — the file simply doesn't change
-fast enough to need it. For the change-by-change loop, that's `/karpathy:diff`.
-
----
-
-### `/karpathy:diff` — review a change before you commit
-
-Where `/karpathy:audit` is occasional, `/karpathy:diff` is for **every change**.
-It reviews an in-progress code change — a git diff — before you commit or accept
-it. The governing question:
-
-> **Does every changed line trace to the task that was asked?**
-
-Coding agents reliably do more than they were asked: they refactor adjacent
-code, reformat, rename, delete comments and code they don't fully understand,
-and over-build the part they *were* asked for. None of that is visible if you
-accept diffs without reading them — which is how most changes get accepted.
-`/karpathy:diff` is the safety net under that, and it matters most for anyone
-who leans on the agent rather than reading every line.
-
-#### What it flags
-
-It walks the diff hunk by hunk and sorts each into *traces to the task*,
-*doesn't trace*, or *can't tell*. The hunks that don't trace become findings:
-
-| Category | What it catches |
-| --- | --- |
-| **Collateral files** | Files changed that the task never required. |
-| **Drive-by refactors** | Renaming or restructuring working code next to the task but not part of it. |
-| **Reformatting / style drift** | Whitespace, quote-style, reordered imports — noise that bloats the diff and hides the real change. |
-| **Unexplained deletions** | Comments or code removed that the task never called for — Karpathy's specific complaint. Every deletion is guilty until it traces. |
-| **Over-engineering** | Speculative abstraction, unrequested config, error handling for impossible cases, 200 lines where 50 would do. |
-| **Missing verification** | A change — especially a bug fix — with no accompanying test or check. |
-| **Orphans** | Imports or variables this change left unused. (Cleaning these up is *in* scope — it's the one removal the skill encourages.) |
-
-It calibrates to the repo: if your `CLAUDE.md` sanctions aggressive deletion of
-legacy code, the skill respects that and won't flag it. It also never flags the
-intended change itself — the work you asked for is supposed to be there.
-
-#### How to use it
-
-```
-/karpathy:diff
+```text
+Run /karpathy:diff before accepting or committing AI-generated code.
 ```
 
-With no argument it reviews **all uncommitted changes** (`git diff HEAD`). You
-can point it somewhere specific:
-
-```
-/karpathy:diff --staged          # only staged changes
-/karpathy:diff main...HEAD       # a branch's worth of changes
-/karpathy:diff src/auth/         # changes under one path
-```
-
-It also triggers automatically when you ask Claude to "review my changes" or
-"check this before I commit."
-
-The review needs to know **what the change was meant to do** — that's the basis
-of the trace test. Run inside the session where the change was made, it reads
-the task from the conversation. Run cold, it will ask you one question: what was
-this change meant to accomplish.
-
-#### When to run it
-
-Run it **before every commit**, or right after the agent finishes a batch of
-edits — especially any batch you didn't read line by line. This is the daily
-driver of the plugin. A good habit: `/karpathy:diff`, read the findings, apply
-the fixes, *then* commit.
-
-#### The report you get
-
-A structured report: the task it's reviewing against, the size of the change, a
-**traceability line** (how many hunks trace to the task), severity-ranked
-findings (Critical / Warning / Nit) each with a location and a concrete fix, a
-**what's clean** section naming the parts that correctly trace, and a list of
-proposed fixes. Then it asks before applying anything.
-
-#### Example
-
-You ask the agent to *"add a `lastLogin` timestamp to the user model."*
-`/karpathy:diff` might report:
-
-- **What's clean** — `models/user.ts`: the `lastLogin` field and its migration
-  trace directly to the task.
-- **[Warning] Reformatting** — `models/user.ts`: the agent also reordered every
-  import and switched the file from `'` to `"` quotes. *Revert it — it buries
-  one real change under 40 lines of noise.*
-- **[Critical] Unexplained deletion** — `auth/session.ts`: a comment explaining
-  a session-refresh edge case was deleted. The file wasn't part of the task.
-  *Restore it.*
-
-Three findings, one of them genuinely dangerous — none of which you'd see if you
-just accepted the diff.
-
----
-
-## Why not just use the original Karpathy CLAUDE.md repo?
-
-Karpathy's post inspired a popular community repo,
-[multica-ai/andrej-karpathy-skills][orig-repo] (100k+ stars), which distills the
-same observations into a `CLAUDE.md` file and a Claude Code plugin.
-
-That repo and this one solve **different problems**:
-
-- **The original repo distributes the guidance.** It gives you a well-written
-  `CLAUDE.md` to drop into a project (or a plugin that installs it) so the agent
-  is *told* to follow the four principles. It's excellent at that, and the
-  writing is genuinely good.
-- **This plugin checks the work.** It doesn't hand you a template — it audits
-  the instruction file you already have (`/karpathy:audit`) and the changes the
-  agent actually produces (`/karpathy:diff`), and tells you where they fall
-  short of the principles.
-
-In short: the original is *"here is a good instruction file."* This is *"tools
-that check whether the principles are actually being followed"* — in your config
-and in your diffs. The original is a one-time paste; checking is something you
-re-run as things drift.
-
-They also compose. `/karpathy:audit` embeds an equivalent canonical
-four-principle block, so when it finds coverage missing it can add the guidance
-too — it covers the original repo's use case and adds the diagnostic layer on
-top. We built a separate plugin rather than forking theirs because an audit
-workflow and a diff-review workflow are different things from a static
-guidelines file — not a tweak to one.
+That is the highest-leverage habit.
 
 ---
 
 ## Install
 
-In Claude Code:
+### Claude Code
 
-```
+Inside Claude Code:
+
+```text
 /plugin marketplace add jokim1/karpathy-skills
 /plugin install karpathy@karpathy-skills
 ```
 
-`/plugin marketplace update` pulls future versions.
+To update later:
 
-## Usage
-
-```
-/karpathy:audit [path]      # audit a CLAUDE.md / AGENTS.md (defaults to ./CLAUDE.md)
-/karpathy:diff  [ref/path]  # review a change before committing (defaults to all uncommitted)
+```text
+/plugin marketplace update karpathy-skills
+/reload-plugins
 ```
 
-Both also trigger automatically — `/karpathy:audit` on "audit my CLAUDE.md",
-`/karpathy:diff` on "review my changes before I commit."
+Claude Code can also auto-update installed plugins at startup. Third-party
+marketplaces default to manual updates, so enable it from:
+
+```text
+/plugin -> Marketplaces -> karpathy-skills -> Enable auto-update
+```
+
+### Codex
+
+Codex can install from this repo's native marketplace at
+`.agents/plugins/marketplace.json`:
+
+```bash
+codex plugin marketplace add jokim1/karpathy-skills
+```
+
+Then install `karpathy` from the Codex plugin directory.
+
+On Codex CLI builds that expose plugin installation directly:
+
+```bash
+codex plugin add karpathy@karpathy-skills
+```
+
+To update later:
+
+```bash
+codex plugin marketplace upgrade karpathy-skills
+```
+
+After a plugin update, start a new Codex thread so the refreshed skills and
+hooks are loaded.
+
+### Update Reminders
+
+The plugin includes an advisory `SessionStart` hook for Claude Code and Codex
+clients that have plugin hooks trusted or enabled.
+
+At most once per day, it compares your installed plugin version with the GitHub
+version and surfaces update instructions if a newer version is available. It does
+not update files automatically and it does not block your session.
+
+To disable the reminder:
+
+```bash
+export KARPATHY_DISABLE_UPDATE_CHECK=1
+```
 
 ---
 
-## Evaluation results
+## Quick Usage
 
-`/karpathy:audit` was benchmarked before release. Three `CLAUDE.md` test files
-were each audited twice — once with the skill, once with an unaided baseline
-(capable Claude, no skill) — and scored against 16 objective assertions.
+```text
+/karpathy:audit [path]
+/karpathy:diff [ref/path]
+```
 
-**The test files:**
+You can also ask in normal words:
 
-| Test file | What it stresses |
+```text
+audit my AGENTS.md
+review my changes before I commit
+did the agent touch anything it should not have?
+```
+
+Claude Code command form:
+
+```text
+/karpathy:audit
+/karpathy:diff
+```
+
+Human-friendly phrasing that should also trigger the skills:
+
+```text
+karpathy audit
+karpathy diff
+```
+
+---
+
+## Skill 1: `/karpathy:audit`
+
+### What It Does
+
+`/karpathy:audit` reviews the files that tell your coding agent how to behave:
+
+- `CLAUDE.md`
+- `AGENTS.md`
+- `.cursor/rules/*.mdc`
+- similar project or global agent instruction files
+
+These files matter because the agent reads them repeatedly. If they are bloated,
+stale, vague, or contradictory, the agent will behave worse.
+
+### When To Use It
+
+Use `/karpathy:audit` when:
+
+- You first add this plugin to a project.
+- You create or edit `CLAUDE.md` or `AGENTS.md`.
+- The agent starts making weird assumptions.
+- The agent keeps overbuilding or ignoring conventions.
+- You want to clean up your project instructions.
+
+You do not need to run this every day. Monthly, after major edits, or when the
+agent starts misbehaving is usually enough.
+
+### User Journey
+
+1. You run:
+
+   ```text
+   /karpathy:audit
+   ```
+
+2. The skill looks for an instruction file:
+
+   ```text
+   ./CLAUDE.md
+   ./AGENTS.md
+   .cursor/rules/*.mdc
+   ```
+
+3. It reports two things:
+
+   - Coverage: does the file teach the agent the four principles?
+   - Quality: is the file itself clear, current, and useful?
+
+4. It gives findings like:
+
+   ```text
+   [WARNING] Stale sprint notes
+   Location: Roadmap section
+   Issue: The file includes "current sprint" notes that will go stale.
+   Fix: Move this to docs/ or delete it from the always-read agent file.
+   ```
+
+5. It also tells you what is already good.
+
+6. It proposes exact changes.
+
+7. It stops and asks before editing anything.
+
+Even when you approve edits, the skill does not stage or commit `CLAUDE.md`,
+`AGENTS.md`, `.cursor/rules`, or other agent instruction files. You decide
+whether those changes belong in git.
+
+### What It Catches
+
+| Problem | Why It Matters |
 | --- | --- |
-| **Bloated file** | Padded with generic advice, repetition, vague rules, no verification commands. |
-| **Contradictions + stale content** | Two flat contradictions, a vague rule, a dated sprint section. |
-| **Already-good file** | A genuinely lean, well-built file that needs nothing — a false-positive test. |
+| Generic advice like "write clean code" | Costs tokens but does not change behavior. |
+| Stale notes like "currently", "for now", or old roadmap items | Misleads future agents. |
+| Vague rules like "handle errors properly" | Forces the agent to guess. |
+| Missing test or build commands | Makes it hard for the agent to know when it is done. |
+| Contradictory instructions | Guarantees inconsistent behavior. |
 
-**Summary:**
+### Example Use
 
-| Metric | With `karpathy` skill | Baseline (no skill) | Delta |
-| --- | --- | --- | --- |
-| Pass rate | **100%** | 69% | **+31 pts** |
-| Avg time | 62.1s | 31.1s | +31s |
-| Avg tokens | 40,274 | 30,707 | +9,567 |
+```text
+/karpathy:audit AGENTS.md
+```
 
-**Per-test breakdown:**
+Possible result:
 
-| Test file | With skill | Baseline |
+```text
+Coverage: 2/4 principles present
+Quality: 3 findings
+
+Critical:
+- No verification commands listed.
+
+Warnings:
+- Roadmap content is living in the always-read instruction file.
+- Several rules are vague and not checkable.
+
+Want me to apply the proposed changes?
+```
+
+---
+
+## Skill 2: `/karpathy:diff`
+
+### What It Does
+
+`/karpathy:diff` reviews the code changes an AI agent made before you commit or
+accept them.
+
+The core question is:
+
+```text
+Does every changed line trace back to the task that was asked?
+```
+
+If the answer is no, the skill flags it.
+
+### When To Use It
+
+Use `/karpathy:diff`:
+
+- Before every commit that includes AI-generated code.
+- After an agent finishes a batch of edits.
+- When you did not read every changed line yourself.
+- When you suspect the agent touched unrelated files.
+
+This is the daily-driver skill.
+
+### User Journey
+
+1. You ask the agent to make a change:
+
+   ```text
+   add a lastLogin timestamp to the user model
+   ```
+
+2. The agent edits files.
+
+3. Before committing, you run:
+
+   ```text
+   /karpathy:diff
+   ```
+
+4. The skill reads the git diff.
+
+5. If the original task is clear from the conversation, it uses that. If not, it
+   asks one question:
+
+   ```text
+   What was this change meant to do?
+   ```
+
+6. It reviews the diff hunk by hunk.
+
+7. It reports:
+
+   - what traces to the task
+   - what does not trace
+   - what is unclear
+   - what to revert, restore, split out, or test
+
+8. It stops and asks before changing anything.
+
+### What It Catches
+
+| Problem | Example |
+| --- | --- |
+| Collateral files | The task was about login, but the agent edited billing files. |
+| Drive-by refactors | The agent renamed helpers next to the real change. |
+| Reformatting noise | The agent changed quote style or reordered imports across a file. |
+| Unexplained deletions | The agent deleted a comment explaining an edge case. |
+| Over-engineering | The task needed one field, but the agent added a framework. |
+| Missing verification | A bug fix has no test or command showing it is fixed. |
+| Orphans | The change leaves unused imports or variables behind. |
+
+### Example Use
+
+```text
+/karpathy:diff
+```
+
+Possible result:
+
+```text
+Task: Add lastLogin timestamp to the user model
+Change: 4 files, +82 / -41 lines
+Traceability: 6 of 8 hunks trace to the task
+
+Critical:
+- auth/session.ts deleted an edge-case comment unrelated to the task.
+
+Warning:
+- models/user.ts was reformatted even though only one field changed.
+
+Clean:
+- The migration and user model field both trace directly to the task.
+
+Want me to apply the proposed fixes?
+```
+
+### Common Targets
+
+```text
+/karpathy:diff                 # all uncommitted changes
+/karpathy:diff --staged        # only staged changes
+/karpathy:diff main...HEAD     # a branch worth of changes
+/karpathy:diff src/auth/       # changes under one path
+```
+
+---
+
+## Skill 3: `/karpathy:wiki` (Designed, Not Shipped Yet)
+
+### What It Will Do
+
+`/karpathy:wiki` is the planned third skill. It applies Karpathy's LLM knowledge
+base pattern to code repositories.
+
+The idea:
+
+- The agent creates a local Markdown wiki for your repo.
+- The wiki summarizes components, workflows, tests, risks, and important rules.
+- The agent reads the wiki before coding so it does not start from zero every
+  time.
+- After changes, the agent updates only the affected wiki pages.
+
+This is meant to help vibe coders who want the agent to understand a project
+without manually writing and maintaining a big documentation site.
+
+### Why The Command Will Be Simple
+
+The first design used several commands:
+
+```text
+init
+compile
+brief
+ask
+update
+lint
+```
+
+That is too much for a human to remember.
+
+The better UX is:
+
+```text
+/karpathy:wiki
+/karpathy wiki
+```
+
+The skill decides what to do based on context.
+
+### Planned User Journeys
+
+| User Enters | Skill Interprets It As | Skill Returns |
 | --- | --- | --- |
-| Bloated file | 6 / 6 | 4 / 6 |
-| Contradictions + stale content | 6 / 6 | 5 / 6 |
-| Already-good file | 4 / 4 | 2 / 4 |
-| **Total** | **16 / 16 (100%)** | **11 / 16 (69%)** |
+| `/karpathy wiki` | No wiki exists | A setup prompt for `knowledge/wiki/`. |
+| `/karpathy wiki add trial expiration handling` | Coding task | A task brief with files, risks, invariants, and tests. |
+| `/karpathy wiki how does auth work?` | Repo question | A cited answer from the wiki and source files. |
+| `/karpathy wiki` after code changes | Wiki update | A proposed update to only affected wiki pages. |
+| `/karpathy wiki doctor` | Health check | Broken links, stale pages, uncited claims, and proposed fixes. |
 
-**What the numbers actually show.** The unaided baseline is no fool — it caught
-the contradictions and the bloat on its own. Where the skill pulls ahead is
-**consistency and calibration**: it always produces a coverage score,
-severity-ranked findings, and the global-vs-project-memory nuance, where the
-baseline's review format drifted from run to run. The most telling case is the
-third test — the file that was already good. The baseline rated it "good" but
-still appended five suggestions and skipped coverage scoring; the skill returned
-**zero quality findings and "ship as-is."** Not manufacturing work on a healthy
-file is the hardest behavior to get right, and it's the clearest thing the skill
-adds.
+### Planned Automation
 
-**Honest caveats.** This is one run per cell — directional evidence, not a
-statistically robust benchmark. The skill also roughly doubles wall-clock time
-and adds about 30% more tokens, because it does more work. `/karpathy:diff` is
-newer and not yet benchmarked; it follows the same report-then-approve design.
+During setup, the wiki skill should offer:
+
+| Option | Meaning |
+| --- | --- |
+| Manual only | User runs `/karpathy wiki` when they want it. |
+| Remind me when stale | A non-blocking git hook warns when changed files may make wiki pages stale. |
+| Auto-update before commit | The agent proposes affected wiki updates before commit. |
+| Auto-update after commit | The agent refreshes metadata after commit and leaves changes for review. |
+
+The planned stale reminder is advisory. It should print something like:
+
+```text
+Wiki reminder: 2 concepts may be stale.
+- Billing Lifecycle: knowledge/wiki/workflows/billing-lifecycle.md
+- Billing Test Surface: knowledge/wiki/tests/billing.md
+
+Run:
+  /karpathy wiki
+
+Commit is allowed. This reminder is advisory.
+```
+
+For the full design, see
+[Repo Knowledge Bases for Coding Agents](docs/repo-knowledge-bases.html).
 
 ---
 
-## Repository layout
+## Recommended Workflow
 
+For most vibe coders:
+
+1. Install the plugin.
+2. Run `/karpathy:audit` once on your project instructions.
+3. Keep using your AI coding agent normally.
+4. Run `/karpathy:diff` before accepting or committing AI-generated code.
+5. When `/karpathy:wiki` ships, use it before larger tasks so the agent starts
+   with better repo context.
+
+Simple habit:
+
+```text
+Agent writes code -> /karpathy:diff -> fix findings -> commit
 ```
+
+---
+
+## What This Is Not
+
+This plugin is not a guarantee that AI-generated code is correct.
+
+It does not replace:
+
+- reading important diffs
+- running tests
+- understanding risky changes
+- code review by someone who knows the system
+
+It is a guardrail. It helps the agent slow down, explain itself, and stay inside
+the task you actually asked for.
+
+---
+
+## Why This Differs From Related Projects
+
+### Compared To The Original Karpathy CLAUDE.md Repo
+
+[multica-ai/andrej-karpathy-skills][orig-repo] distributes guidance. It gives
+you a good instruction file so the agent is told how to behave.
+
+This repo checks behavior:
+
+- `/karpathy:audit` checks whether your instruction file is actually good.
+- `/karpathy:diff` checks whether the agent's code changes actually stayed
+  inside the task.
+
+Those are different jobs. A static instruction file is useful, but the real
+question is whether the agent followed it.
+
+### Compared To Normal Code Review
+
+Normal review asks:
+
+```text
+Is this code good?
+```
+
+`/karpathy:diff` asks a narrower first question:
+
+```text
+Did this change do only what was asked?
+```
+
+That narrow question is valuable because AI agents often make unrelated changes
+that look reasonable at a glance.
+
+### Compared To Traditional Documentation
+
+Traditional docs rot because humans stop updating them.
+
+The planned `/karpathy:wiki` skill follows the LLM wiki pattern: let the agent
+maintain a small local Markdown wiki, with citations back to source files, so
+repo knowledge accumulates over time.
+
+### Compared To OKF, Graphify, And Memory Tools
+
+Google's Open Knowledge Format (OKF) gives a simple file format for Markdown
+knowledge bundles. That is useful, and the planned wiki skill should use it
+rather than inventing a competing format.
+
+Graphify-style tools are strong at turning a folder into a graph you can query.
+The planned wiki skill is narrower: it is about coding-agent behavior before,
+during, and after edits.
+
+ByteRover-style tools are broader agent memory systems. The planned wiki skill
+is repo-local, file-based, and tied to the Karpathy audit/diff loop.
+
+---
+
+## Sources And Inspiration
+
+This project is based on several public ideas and tools:
+
+| Source | What We Took From It | What We Changed |
+| --- | --- | --- |
+| [Andrej Karpathy's public coding-agent observations][karpathy-post] | The core failure modes: silent assumptions, overbuilding, collateral edits, missing verification. | Turned the ideas into runnable audit and diff-review workflows. |
+| [multica-ai/andrej-karpathy-skills][orig-repo] | A clear expression of Karpathy-style guidance for agent instruction files. | Built checking tools instead of only distributing guidance. |
+| [Open Knowledge Format][okf-spec] | The planned repo wiki should use plain Markdown, YAML frontmatter, links, indexes, and logs. | Use OKF as a storage format, not as the whole product. |
+| [Google's OKF announcement][okf-announcement] | The idea that LLM-maintained wikis can be portable, local, and agent-friendly. | Apply the pattern specifically to coding-agent repo workflows. |
+| [Graphify][graphify] | Folder-to-graph and codebase Q&A are useful for orientation. | Focus on task briefs, source citations, and diff-aware maintenance. |
+| [ByteRover CLI][byterover] | Inspectable, file-based agent memory is better than a black box. | Keep the first version repo-local and lightweight. |
+| [Claude Code plugin docs][claude-plugin-docs] | Marketplace packaging, plugin updates, skills, commands, and hooks. | Package the workflows as installable Claude Code skills. |
+| [Codex plugin docs][codex-plugin-docs] | Native Codex plugin manifests and marketplace entries. | Ship the same plugin to Codex without requiring users to copy raw skill files. |
+
+---
+
+## Evaluation Results
+
+`/karpathy:audit` was benchmarked before release on three instruction-file test
+cases:
+
+| Test File | What It Stressed |
+| --- | --- |
+| Bloated file | Generic advice, repetition, vague rules, no verification commands. |
+| Contradictions + stale content | Contradictory rules, vague guidance, dated sprint notes. |
+| Already-good file | A lean file that should be left alone. |
+
+Summary:
+
+| Metric | With `karpathy` Skill | Baseline Without Skill |
+| --- | --- | --- |
+| Pass rate | 100% | 69% |
+| Average time | 62.1s | 31.1s |
+| Average tokens | 40,274 | 30,707 |
+
+The important result was not just catching bad files. It was leaving the good
+file alone. The skill returned zero quality findings on the already-good file,
+where the baseline still invented extra suggestions.
+
+Caveat: this was a small benchmark. It is directional evidence, not a full
+academic evaluation. `/karpathy:diff` is newer and has not been benchmarked in
+the same way yet.
+
+---
+
+## Repository Layout
+
+```text
 karpathy-skills/
-├── .claude-plugin/
-│   └── marketplace.json          # marketplace catalog
-└── plugins/
-    └── karpathy/
-        ├── .claude-plugin/
-        │   └── plugin.json       # plugin manifest
-        ├── commands/
-        │   ├── audit.md          # the /karpathy:audit command
-        │   └── diff.md           # the /karpathy:diff command
-        └── skills/
-            ├── karpathy-audit/
-            │   └── SKILL.md      # audit logic (also auto-triggers)
-            └── karpathy-diff/
-                └── SKILL.md      # diff-review logic (also auto-triggers)
+|-- .agents/
+|   `-- plugins/
+|       `-- marketplace.json      # Codex marketplace catalog
+|-- .claude-plugin/
+|   `-- marketplace.json          # Claude Code marketplace catalog
+|-- docs/
+|   `-- repo-knowledge-bases.html # planned wiki skill rationale
+`-- plugins/
+    `-- karpathy/
+        |-- .codex-plugin/
+        |   `-- plugin.json       # Codex plugin manifest
+        |-- .claude-plugin/
+        |   `-- plugin.json       # Claude Code plugin manifest
+        |-- commands/
+        |   |-- audit.md          # /karpathy:audit command
+        |   `-- diff.md           # /karpathy:diff command
+        |-- hooks/
+        |   `-- hooks.json        # advisory update-check hook
+        |-- scripts/
+        |   `-- check_update.py   # shared update checker
+        `-- skills/
+            |-- karpathy-audit/
+            |   `-- SKILL.md
+            `-- karpathy-diff/
+                `-- SKILL.md
 ```
-
-To add another plugin later, drop it under `plugins/` and add an entry to
-`marketplace.json`.
 
 ---
 
-## Background and attribution
+## Release Checklist
 
-The four principles distill observations Andrej Karpathy
-[posted publicly][karpathy-post] in January 2026. This is an independent,
-community tool. It is **not affiliated with, authored by, or endorsed by Andrej
-Karpathy or Anthropic.**
+When publishing a new version:
+
+1. Update the plugin files.
+2. Bump the version in:
+   - `.claude-plugin/marketplace.json`
+   - `plugins/karpathy/.claude-plugin/plugin.json`
+   - `plugins/karpathy/.codex-plugin/plugin.json`
+3. Validate:
+
+   ```bash
+   claude plugin validate .
+   claude plugin validate ./plugins/karpathy
+   python3 -m json.tool .agents/plugins/marketplace.json >/dev/null
+   python3 -m json.tool plugins/karpathy/.codex-plugin/plugin.json >/dev/null
+   python3 -m py_compile plugins/karpathy/scripts/check_update.py
+   ```
+
+4. Commit, tag, and push.
+
+---
+
+## Background And Attribution
+
+The four principles are distilled from Andrej Karpathy's public comments about
+AI coding agents. This is an independent community tool. It is not affiliated
+with, authored by, or endorsed by Andrej Karpathy, Anthropic, OpenAI, Google, or
+any related project mentioned above.
 
 [karpathy-post]: https://x.com/karpathy/status/2015883857489522876
 [orig-repo]: https://github.com/multica-ai/andrej-karpathy-skills
+[okf-spec]: https://github.com/GoogleCloudPlatform/knowledge-catalog/blob/main/okf/SPEC.md
+[okf-announcement]: https://cloud.google.com/blog/products/data-analytics/how-the-open-knowledge-format-can-improve-data-sharing
+[graphify]: https://github.com/safishamsi/graphify
+[byterover]: https://github.com/campfirein/byterover-cli
+[claude-plugin-docs]: https://code.claude.com/docs/en/plugin-marketplaces
+[codex-plugin-docs]: https://developers.openai.com/codex/plugins/build
 
 ## License
 
-MIT © 2026 Joseph Kim
+MIT (c) 2026 Joseph Kim

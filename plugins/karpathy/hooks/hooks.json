@@ -1,0 +1,17 @@
+{
+  "description": "Advisory update checks for the Karpathy plugin.",
+  "hooks": {
+    "SessionStart": [
+      {
+        "matcher": "startup|resume",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "sh -c 'ROOT=\"${CLAUDE_PLUGIN_ROOT:-${PLUGIN_ROOT:-}}\"; if [ -z \"$ROOT\" ]; then exit 0; fi; python3 \"$ROOT/scripts/check_update.py\" --system-message'",
+            "timeout": 10
+          }
+        ]
+      }
+    ]
+  }
+}

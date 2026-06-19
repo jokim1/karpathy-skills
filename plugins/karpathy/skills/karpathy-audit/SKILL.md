@@ -33,6 +33,11 @@ easily. Audit it the way you would audit code.
 Default to **report first, apply on approval**. Never rewrite the file before
 the user has seen the findings and a concrete diff.
 
+Never stage or commit `CLAUDE.md`, `AGENTS.md`, `.cursor/rules`, or other
+agent instruction / memory files. You may propose changes, and you may edit
+them after explicit approval, but the user decides whether those changes belong
+in git.
+
 ## Scope: what is NOT a defect
 
 Before flagging anything, be clear about what an instruction file is *for*. A
@@ -69,7 +74,7 @@ of project context deserves to exist. When in doubt, leave it and say so.
 5. **Apply on approval.** Only after the user approves, make the edits —
    surgically. Preserve their headings, voice, and ordering; change only the
    lines the findings name; never reformat the whole file. (Yes — the skill
-   itself follows principle 3.)
+   itself follows principle 3.) Do not stage or commit the instruction file.
 
 ## Coverage audit
 
@@ -208,6 +213,9 @@ When approved:
   behavioral principles; only write them into a project file if the user asks.
 - When you move volatile content out, put it somewhere sensible (`docs/`)
   rather than deleting it, unless the user says delete.
+- Leave `CLAUDE.md`, `AGENTS.md`, `.cursor/rules`, and similar agent files
+  unstaged and uncommitted. Tell the user what changed and let them decide
+  whether to include it in version control.
 
 ## Canonical principles block
 

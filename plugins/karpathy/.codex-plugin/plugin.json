@@ -1,0 +1,40 @@
+{
+  "name": "karpathy",
+  "version": "1.1.0",
+  "description": "Operationalizes Andrej Karpathy's four LLM-coding principles as coding-agent skills. Audit agent instruction files and review code diffs for scope creep, drive-by refactors, unexplained deletions, over-engineering, and missing verification.",
+  "author": {
+    "name": "Joseph Kim",
+    "url": "https://github.com/jokim1"
+  },
+  "homepage": "https://github.com/jokim1/karpathy-skills",
+  "repository": "https://github.com/jokim1/karpathy-skills",
+  "license": "MIT",
+  "keywords": [
+    "karpathy",
+    "agents-md",
+    "claude-md",
+    "audit",
+    "diff",
+    "code-review",
+    "agent-instructions"
+  ],
+  "skills": "./skills/",
+  "interface": {
+    "displayName": "Karpathy",
+    "shortDescription": "Audit agent instructions and review diffs against Karpathy principles.",
+    "longDescription": "Use Karpathy to audit CLAUDE.md, AGENTS.md, and other agent instruction files, then review code changes for scope creep, drive-by refactors, unexplained deletions, over-engineering, and missing verification. The plugin reports first and applies fixes only after approval.",
+    "developerName": "Joseph Kim",
+    "category": "Productivity",
+    "capabilities": [
+      "Read",
+      "Write"
+    ],
+    "websiteURL": "https://github.com/jokim1/karpathy-skills",
+    "defaultPrompt": [
+      "Review my changes before I commit.",
+      "Audit this AGENTS.md for agent guidance.",
+      "Check whether this diff stayed surgical."
+    ],
+    "brandColor": "#2367C9"
+  }
+}

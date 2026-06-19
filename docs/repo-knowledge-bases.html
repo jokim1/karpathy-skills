@@ -1,0 +1,1179 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Repo Knowledge Bases: Context, Rationale, and Differentiation</title>
+  <style>
+    :root {
+      color-scheme: light;
+      --bg: #f7f8fb;
+      --paper: #ffffff;
+      --ink: #17202a;
+      --muted: #5f6b7a;
+      --line: #d9dee7;
+      --soft: #eef2f7;
+      --accent: #2367c9;
+      --accent-soft: #e8f0fe;
+      --green: #117a55;
+      --amber: #9a6200;
+      --red: #a33535;
+      --code: #0f1720;
+    }
+
+    * {
+      box-sizing: border-box;
+    }
+
+    body {
+      margin: 0;
+      background: var(--bg);
+      color: var(--ink);
+      font: 16px/1.58 -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+    }
+
+    .page {
+      max-width: 1120px;
+      margin: 0 auto;
+      padding: 40px 24px 72px;
+    }
+
+    .hero {
+      padding: 32px 0 26px;
+      border-bottom: 1px solid var(--line);
+    }
+
+    .eyebrow {
+      margin: 0 0 12px;
+      color: var(--accent);
+      font-size: 13px;
+      font-weight: 700;
+      letter-spacing: 0.08em;
+      text-transform: uppercase;
+    }
+
+    h1 {
+      margin: 0;
+      max-width: 880px;
+      font-size: clamp(36px, 5vw, 58px);
+      line-height: 1.05;
+      letter-spacing: 0;
+    }
+
+    .subtitle {
+      max-width: 850px;
+      margin: 18px 0 0;
+      color: var(--muted);
+      font-size: 20px;
+      line-height: 1.45;
+    }
+
+    .meta {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 10px;
+      margin-top: 22px;
+      color: var(--muted);
+      font-size: 14px;
+    }
+
+    .pill {
+      border: 1px solid var(--line);
+      border-radius: 999px;
+      padding: 5px 10px;
+      background: var(--paper);
+    }
+
+    .section {
+      padding: 34px 0;
+      border-bottom: 1px solid var(--line);
+    }
+
+    h2 {
+      margin: 0 0 14px;
+      font-size: 28px;
+      line-height: 1.2;
+      letter-spacing: 0;
+    }
+
+    h3 {
+      margin: 24px 0 8px;
+      font-size: 19px;
+      line-height: 1.25;
+      letter-spacing: 0;
+    }
+
+    p {
+      max-width: 850px;
+      margin: 0 0 14px;
+    }
+
+    a {
+      color: var(--accent);
+      text-decoration-thickness: 1px;
+      text-underline-offset: 3px;
+    }
+
+    ul,
+    ol {
+      max-width: 880px;
+      margin: 12px 0 0;
+      padding-left: 24px;
+    }
+
+    li {
+      margin: 8px 0;
+    }
+
+    strong {
+      font-weight: 700;
+    }
+
+    code {
+      border-radius: 4px;
+      padding: 1px 5px;
+      background: var(--soft);
+      color: var(--code);
+      font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", monospace;
+      font-size: 0.92em;
+    }
+
+    pre {
+      overflow: auto;
+      max-width: 960px;
+      margin: 16px 0;
+      border: 1px solid var(--line);
+      border-radius: 8px;
+      padding: 16px;
+      background: #111923;
+      color: #edf3f8;
+      font: 14px/1.5 ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", monospace;
+    }
+
+    pre code {
+      padding: 0;
+      background: transparent;
+      color: inherit;
+      font-size: inherit;
+    }
+
+    table {
+      width: 100%;
+      margin: 18px 0 0;
+      border-collapse: collapse;
+      border: 1px solid var(--line);
+      background: var(--paper);
+      font-size: 14px;
+    }
+
+    th,
+    td {
+      vertical-align: top;
+      border: 1px solid var(--line);
+      padding: 12px 14px;
+      text-align: left;
+    }
+
+    th {
+      background: var(--soft);
+      font-weight: 700;
+    }
+
+    .callout {
+      max-width: 920px;
+      margin: 20px 0 0;
+      border: 1px solid #bdd0ef;
+      border-left: 5px solid var(--accent);
+      border-radius: 8px;
+      padding: 16px 18px;
+      background: var(--accent-soft);
+    }
+
+    .callout p:last-child {
+      margin-bottom: 0;
+    }
+
+    .grid {
+      display: grid;
+      grid-template-columns: repeat(3, minmax(0, 1fr));
+      gap: 16px;
+      margin-top: 18px;
+    }
+
+    .box {
+      border: 1px solid var(--line);
+      border-radius: 8px;
+      padding: 16px;
+      background: var(--paper);
+    }
+
+    .box h3 {
+      margin-top: 0;
+    }
+
+    .box p {
+      margin-bottom: 0;
+      color: var(--muted);
+      font-size: 15px;
+    }
+
+    .status {
+      display: inline-block;
+      border-radius: 999px;
+      padding: 2px 8px;
+      font-size: 12px;
+      font-weight: 700;
+      white-space: nowrap;
+    }
+
+    .status-good {
+      background: #e6f4ee;
+      color: var(--green);
+    }
+
+    .status-gap {
+      background: #fff4db;
+      color: var(--amber);
+    }
+
+    .status-risk {
+      background: #fdeaea;
+      color: var(--red);
+    }
+
+    .toc {
+      display: grid;
+      grid-template-columns: repeat(2, minmax(0, 1fr));
+      gap: 10px 22px;
+      max-width: 920px;
+      margin-top: 18px;
+      padding-left: 0;
+      list-style: none;
+    }
+
+    .toc li {
+      margin: 0;
+    }
+
+    .toc a {
+      display: block;
+      border: 1px solid var(--line);
+      border-radius: 8px;
+      padding: 10px 12px;
+      background: var(--paper);
+      text-decoration: none;
+    }
+
+    .compact p {
+      margin-bottom: 8px;
+    }
+
+    .footer {
+      padding-top: 32px;
+      color: var(--muted);
+      font-size: 14px;
+    }
+
+    @media (max-width: 820px) {
+      main {
+        padding: 24px 16px 52px;
+      }
+
+      .grid,
+      .toc {
+        grid-template-columns: 1fr;
+      }
+
+      table {
+        display: block;
+        overflow-x: auto;
+      }
+    }
+  </style>
+</head>
+<body>
+  <div class="page">
+    <div class="hero">
+      <p class="eyebrow">Karpathy skills proposal</p>
+      <h1>Repo Knowledge Bases for Coding Agents</h1>
+      <p class="subtitle">
+        Context, rationale, and differentiation for adding an OKF-compatible repo knowledge layer
+        to the existing Karpathy audit and diff skills.
+      </p>
+      <div class="meta" aria-label="Document metadata">
+        <span class="pill">Generated: 2026-06-19</span>
+        <span class="pill">Audience: vibe coders and coding-agent tool builders</span>
+        <span class="pill">Status: product rationale</span>
+      </div>
+    </div>
+
+    <div class="section" id="summary">
+      <h2>Executive Summary</h2>
+      <p>
+        Google's Open Knowledge Format (OKF) already formalizes the lightweight "LLM wiki"
+        pattern: a directory of Markdown files with YAML frontmatter, cross-links, optional
+        index files, optional logs, and a permissive conformance model. We should not invent a
+        competing file format.
+      </p>
+      <p>
+        The opportunity is to build a code-repo-specific discipline layer on top of OKF:
+        producers that compile useful repo concepts, consumers that produce task briefs before
+        coding, and guardrails that keep the wiki aligned with real code as diffs land.
+      </p>
+      <div class="callout">
+        <p>
+          <strong>Positioning:</strong> OKF is the storage and interchange format. A Karpathy
+          repo knowledge-base skill would be the coding-agent workflow that decides what to
+          capture, when to consult it, how to verify it, and how to update it without drifting
+          away from source code.
+        </p>
+      </div>
+    </div>
+
+    <div class="section" id="contents">
+      <h2>Contents</h2>
+      <ul class="toc">
+        <li><a href="#background">1. Background</a></li>
+        <li><a href="#problem">2. Problem for Vibe Coders</a></li>
+        <li><a href="#existing">3. Existing Landscape</a></li>
+        <li><a href="#building">4. What We Are Building</a></li>
+        <li><a href="#journeys">5. End-to-End User Journeys</a></li>
+        <li><a href="#automation">6. Automation Model</a></li>
+        <li><a href="#differences">7. Differences From Existing Tools</a></li>
+        <li><a href="#design">8. Design Principles</a></li>
+        <li><a href="#mvp">9. MVP Scope</a></li>
+        <li><a href="#risks">10. Risks and Guardrails</a></li>
+      </ul>
+    </div>
+
+    <div class="section" id="background">
+      <h2>Background</h2>
+      <p>
+        The current repository contains two skills based on Andrej Karpathy's coding-agent
+        principles:
+      </p>
+      <ul>
+        <li>
+          <code>/karpathy:audit</code> reviews agent instruction files such as
+          <code>CLAUDE.md</code>, <code>AGENTS.md</code>, and Cursor rules. It asks whether the
+          instructions cover the four principles and whether the instruction file itself is lean,
+          current, unambiguous, and verifiable.
+        </li>
+        <li>
+          <code>/karpathy:diff</code> reviews a code diff before commit. Its core test is whether
+          every changed hunk traces to the task that was asked.
+        </li>
+      </ul>
+      <p>
+        These skills address two important failure points: bad standing instructions and bad
+        generated diffs. They do not yet address the repeated orientation problem that happens
+        before coding starts: every agent session re-reads the same files, rebuilds the same
+        mental map, misses relationships across files, and spends tokens discovering context that
+        should have accumulated.
+      </p>
+      <p>
+        Karpathy's LLM Knowledge Base pattern points at that missing layer. Raw material is stored
+        as immutable source data, an LLM compiles it into a clean Markdown wiki, the wiki is
+        maintained by agents rather than humans, and subsequent questions operate mostly over the
+        compiled knowledge instead of the raw pile.
+      </p>
+    </div>
+
+    <div class="section" id="problem">
+      <h2>Problem for Vibe Coders</h2>
+      <p>
+        Vibe coders delegate a large share of implementation to an agent, but they still need the
+        agent to understand the repo before it edits. The practical failure mode is not that the
+        agent cannot read files. The failure mode is that it reads too many files shallowly, forgets
+        relationships from prior sessions, and then makes plausible but wrong edits.
+      </p>
+      <div class="grid">
+        <div class="box">
+          <h3>Cold Start Cost</h3>
+          <p>
+            Each new task burns tokens on repo discovery: file layout, naming conventions, common
+            tests, APIs, data flow, and local invariants.
+          </p>
+        </div>
+        <div class="box">
+          <h3>Context Fragmentation</h3>
+          <p>
+            Critical facts live in code, comments, tests, old PRs, docs, screenshots, and the
+            developer's memory. Agents assemble that context inconsistently.
+          </p>
+        </div>
+        <div class="box">
+          <h3>Untrusted Momentum</h3>
+          <p>
+            Once the agent starts editing from a weak mental model, the user has to detect scope
+            creep, missed invariants, and silent assumptions after the damage is already in the diff.
+          </p>
+        </div>
+      </div>
+      <p>
+        The useful product for vibe coders is not a prettier generated wiki. It is a fast, local,
+        inspectable orientation layer that answers:
+      </p>
+      <pre><code>For this task:
+- What files probably matter?
+- What concepts and invariants should the agent read first?
+- What source citations support those claims?
+- What tests or commands prove success?
+- What parts of the repo should the agent avoid touching?</code></pre>
+    </div>
+
+    <div class="section" id="existing">
+      <h2>Existing Landscape</h2>
+
+      <h3>Google Open Knowledge Format</h3>
+      <p>
+        OKF v0.1 is a draft open format for representing knowledge as Markdown files with YAML
+        frontmatter. It requires a non-empty <code>type</code> field for each concept document,
+        recommends fields such as <code>title</code>, <code>description</code>,
+        <code>resource</code>, <code>tags</code>, and <code>timestamp</code>, supports standard
+        Markdown links between concepts, and defines reserved <code>index.md</code> and
+        <code>log.md</code> files for progressive disclosure and update history.
+      </p>
+      <p>
+        The spec explicitly avoids defining a fixed taxonomy, storage layer, serving model, SDK, or
+        query infrastructure. That is its strength. It is a lingua franca, not a product workflow.
+      </p>
+
+      <h3>Google Knowledge Catalog Reference Work</h3>
+      <p>
+        Google's announcement and repository ship reference implementations: a BigQuery-oriented
+        enrichment agent, sample bundles, and a static HTML visualizer. These make OKF concrete,
+        but they are proofs of concept and are weighted toward data catalog use cases.
+      </p>
+
+      <h3>Graphify-Style Knowledge Graph Tools</h3>
+      <p>
+        Graphify-style tools point at a folder and produce an interactive graph, a report, and a
+        queryable graph artifact across code, docs, PDFs, images, and other materials. This is close
+        to the codebase orientation problem and may overlap with repo map generation.
+      </p>
+      <p>
+        The important distinction is that a graph generator is usually optimized for extraction and
+        query. The proposed Karpathy repo knowledge layer is optimized for disciplined coding-agent
+        behavior before, during, and after edits.
+      </p>
+
+      <h3>ByteRover-Style Agent Memory</h3>
+      <p>
+        ByteRover-style tools focus on portable, inspectable memory for coding agents. Their
+        framing is strong: file-based memory can be diffed, branched, merged, inspected, and shared
+        without a hidden vector database.
+      </p>
+      <p>
+        The proposed layer should learn from that design, but stay narrower: repo-local,
+        OKF-compatible, task-brief-first, and integrated with Karpathy audit and diff review.
+      </p>
+
+      <h3>Traditional RAG and Vector Search</h3>
+      <p>
+        RAG systems can be useful at larger scale, but they often introduce infrastructure before
+        the repo needs it. Karpathy's observation is that at small and medium scale, an agent can do
+        surprisingly well with maintained indexes, summaries, and links. That is especially true
+        for repos where the knowledge can live beside the code in version control.
+      </p>
+    </div>
+
+    <div class="section" id="building">
+      <h2>What We Are Building</h2>
+      <p>
+        Build a third Karpathy skill: <code>/karpathy:wiki</code>. The skill maintains an
+        OKF-compatible repo knowledge bundle and uses it to produce implementation briefs before
+        coding. It should make agents more deliberate, more surgical, and easier for vibe coders to
+        supervise.
+      </p>
+
+      <h3>Proposed Directory Shape</h3>
+      <pre><code>knowledge/
+  raw/
+    tickets/
+    screenshots/
+    external-docs/
+  wiki/
+    index.md
+    log.md
+    components/
+    workflows/
+    invariants/
+    decisions/
+    tests/
+    runbooks/
+  outputs/
+    task-briefs/
+    qa-reports/
+    diagrams/
+  rules.md</code></pre>
+      <p>
+        Source code should not be copied into <code>raw/</code>. The repository is already the
+        source. Wiki concepts should cite and link back to code, tests, docs, and external material.
+      </p>
+
+      <h3>Repo Concept Types</h3>
+      <p>
+        OKF does not prescribe concept types, so the skill should define a small repo-specific
+        vocabulary that agents can use consistently:
+      </p>
+      <table>
+        <thead>
+          <tr>
+            <th>Type</th>
+            <th>Purpose</th>
+            <th>Typical Resource</th>
+          </tr>
+        </thead>
+        <tbody>
+          <tr>
+            <td><code>Component</code></td>
+            <td>A coherent implementation area with ownership, dependencies, and public surface.</td>
+            <td>Source directory or primary module.</td>
+          </tr>
+          <tr>
+            <td><code>Workflow</code></td>
+            <td>A user or system flow that crosses files and services.</td>
+            <td>Routes, handlers, tests, or product docs.</td>
+          </tr>
+          <tr>
+            <td><code>Invariant</code></td>
+            <td>A rule that must remain true across changes.</td>
+            <td>Tests, comments, validation code, schema constraints.</td>
+          </tr>
+          <tr>
+            <td><code>Decision</code></td>
+            <td>A durable architectural or product decision, with context and tradeoffs.</td>
+            <td>ADR, PR, issue, commit, or cited code.</td>
+          </tr>
+          <tr>
+            <td><code>Test Surface</code></td>
+            <td>The commands and files that verify a behavior area.</td>
+            <td>Test files, package scripts, CI config.</td>
+          </tr>
+          <tr>
+            <td><code>Task Recipe</code></td>
+            <td>A reusable implementation path for common tasks.</td>
+            <td>Prior diffs, docs, and tests.</td>
+          </tr>
+          <tr>
+            <td><code>Failure Mode</code></td>
+            <td>A known bug pattern, sharp edge, or operational risk.</td>
+            <td>Issues, test regressions, logs, runbooks.</td>
+          </tr>
+        </tbody>
+      </table>
+
+      <h3>Example Concept</h3>
+      <pre><code>---
+type: Component
+title: Session Authentication
+description: Validates session tokens and attaches the current user to request context.
+resource: ../../src/auth/session.ts
+tags: [auth, middleware, security]
+timestamp: 2026-06-19T00:00:00Z
+source_commit: abc123
+confidence: high
+verified_by: ["npm test -- auth"]
+---
+
+# Role
+
+Describes what this component owns and what it does not own.
+
+# Public Surface
+
+Lists entry points, exported functions, routes, or CLI commands.
+
+# Invariants
+
+Documents rules the agent must preserve before editing.
+
+# Depends On
+
+Links to related concepts and source files.
+
+# Common Changes
+
+Gives task recipes for common edits.
+
+# Citations
+
+[1] [session.ts](../../src/auth/session.ts)
+[2] [session tests](../../tests/auth/session.test.ts)</code></pre>
+
+      <h3>Command Surface</h3>
+      <p>
+        The public command surface should stay small. Users should not need to learn the wiki
+        lifecycle. The skill should infer setup, refresh, briefing, answering, updating, and health
+        checks from repo state and from the user's input.
+      </p>
+      <table>
+        <thead>
+          <tr>
+            <th>Command</th>
+            <th>When a User Enters It</th>
+            <th>What the Skill Does</th>
+          </tr>
+        </thead>
+        <tbody>
+          <tr>
+            <td><code>/karpathy:wiki</code><br><code>/karpathy wiki</code></td>
+            <td>No arguments, or the user wants the wiki to decide what is needed.</td>
+            <td>Context-aware entrypoint: setup if no wiki exists, update if code changed, status if clean.</td>
+          </tr>
+          <tr>
+            <td><code>/karpathy:wiki how does auth work?</code><br><code>/karpathy wiki how does auth work?</code></td>
+            <td>The input is question-shaped.</td>
+            <td>Answer from the wiki first, then read cited source files if needed. Return citations and stale warnings.</td>
+          </tr>
+          <tr>
+            <td><code>/karpathy:wiki add trial expiration handling</code><br><code>/karpathy wiki add trial expiration handling</code></td>
+            <td>The input is task-shaped.</td>
+            <td>Produce a task brief: likely files, relevant concepts, invariants, risks, and verification commands.</td>
+          </tr>
+          <tr>
+            <td><code>/karpathy:wiki doctor</code><br><code>/karpathy wiki doctor</code></td>
+            <td>The user explicitly wants maintenance.</td>
+            <td>Run a health check for broken links, stale source references, uncited claims, and OKF conformance issues.</td>
+          </tr>
+        </tbody>
+      </table>
+
+      <h3>Internal Intents Hidden Behind the Command</h3>
+      <table>
+        <thead>
+          <tr>
+            <th>Old Explicit Command</th>
+            <th>New User Experience</th>
+            <th>Trigger</th>
+          </tr>
+        </thead>
+        <tbody>
+          <tr>
+            <td><code>init</code></td>
+            <td>Automatic setup prompt.</td>
+            <td>No <code>knowledge/wiki/</code> exists.</td>
+          </tr>
+          <tr>
+            <td><code>compile</code></td>
+            <td>"Build the wiki" or "refresh the wiki" behind the scenes.</td>
+            <td>First setup, missing indexes, or many uncataloged source areas.</td>
+          </tr>
+          <tr>
+            <td><code>brief</code></td>
+            <td>Task brief before implementation.</td>
+            <td>User input looks like a coding task.</td>
+          </tr>
+          <tr>
+            <td><code>ask</code></td>
+            <td>Cited answer from wiki and source.</td>
+            <td>User input looks like a question.</td>
+          </tr>
+          <tr>
+            <td><code>update</code></td>
+            <td>Surgical wiki update proposal.</td>
+            <td>Git diff touches files cited by wiki concepts.</td>
+          </tr>
+          <tr>
+            <td><code>lint</code></td>
+            <td>Health report.</td>
+            <td>User runs <code>doctor</code>, or setup automation runs a non-blocking check.</td>
+          </tr>
+        </tbody>
+      </table>
+    </div>
+
+    <div class="section" id="journeys">
+      <h2>End-to-End User Journeys</h2>
+      <p>
+        The guiding UX rule is that the user remembers one command and the skill handles mode
+        selection. The command should accept both colon and space forms: <code>/karpathy:wiki</code>
+        and <code>/karpathy wiki</code>.
+      </p>
+
+      <h3>First Run</h3>
+      <table>
+        <thead>
+          <tr>
+            <th>User Enters</th>
+            <th>Skill Returns</th>
+            <th>Behind the Scenes</th>
+          </tr>
+        </thead>
+        <tbody>
+          <tr>
+            <td><code>/karpathy wiki</code></td>
+            <td>
+              "No repo wiki found. I can create one at <code>knowledge/wiki/</code> using
+              OKF-compatible Markdown. I will start with repo overview, component map, test
+              surfaces, known commands, <code>index.md</code>, and <code>log.md</code>. Proceed?"
+            </td>
+            <td>Detect missing bundle, explain the target files, and ask before writing.</td>
+          </tr>
+        </tbody>
+      </table>
+
+      <h3>Setup Automation</h3>
+      <table>
+        <thead>
+          <tr>
+            <th>User Enters</th>
+            <th>Skill Returns</th>
+            <th>Behind the Scenes</th>
+          </tr>
+        </thead>
+        <tbody>
+          <tr>
+            <td><code>yes</code> to setup</td>
+            <td>
+              "Automation level: 1. Manual only. 2. Remind me when the wiki is stale.
+              3. Auto-update affected wiki pages before commit. 4. Auto-update after commit and
+              leave changes for review."
+            </td>
+            <td>Offer automation as a setup choice instead of requiring the user to remember maintenance commands.</td>
+          </tr>
+        </tbody>
+      </table>
+
+      <h3>Coding Task</h3>
+      <table>
+        <thead>
+          <tr>
+            <th>User Enters</th>
+            <th>Skill Returns</th>
+            <th>Behind the Scenes</th>
+          </tr>
+        </thead>
+        <tbody>
+          <tr>
+            <td><code>/karpathy wiki add trial expiration handling</code></td>
+            <td>
+              A task brief with likely files, relevant concepts, invariants, risks, and verification
+              commands. It ends with: "Before coding, I will read the cited source files. Proceed?"
+            </td>
+            <td>Classify the input as a task, read indexes and relevant concepts, then require source verification before edits.</td>
+          </tr>
+        </tbody>
+      </table>
+
+      <h3>Repo Question</h3>
+      <table>
+        <thead>
+          <tr>
+            <th>User Enters</th>
+            <th>Skill Returns</th>
+            <th>Behind the Scenes</th>
+          </tr>
+        </thead>
+        <tbody>
+          <tr>
+            <td><code>/karpathy wiki how does auth work?</code></td>
+            <td>
+              A cited answer grouped by relevant concepts and source files, plus any stale claims
+              that should be refreshed.
+            </td>
+            <td>Classify the input as a question, answer from wiki first, then read cited source where needed.</td>
+          </tr>
+        </tbody>
+      </table>
+
+      <h3>Changed Code</h3>
+      <table>
+        <thead>
+          <tr>
+            <th>User Enters</th>
+            <th>Skill Returns</th>
+            <th>Behind the Scenes</th>
+          </tr>
+        </thead>
+        <tbody>
+          <tr>
+            <td><code>/karpathy wiki</code></td>
+            <td>
+              "I found code changes since the wiki was last updated. Affected concepts:
+              Billing Lifecycle and Billing Test Surface. Apply proposed wiki updates?"
+            </td>
+            <td>Inspect git diff, map changed files to concepts by citations and resources, and propose only affected wiki edits.</td>
+          </tr>
+        </tbody>
+      </table>
+
+      <h3>Explicit Health Check</h3>
+      <table>
+        <thead>
+          <tr>
+            <th>User Enters</th>
+            <th>Skill Returns</th>
+            <th>Behind the Scenes</th>
+          </tr>
+        </thead>
+        <tbody>
+          <tr>
+            <td><code>/karpathy wiki doctor</code></td>
+            <td>
+              A wiki health report: critical issues, warnings, clean checks, and proposed fixes.
+              The skill asks before applying changes.
+            </td>
+            <td>Run OKF conformance checks, link checks, citation checks, stale source checks, and consistency checks.</td>
+          </tr>
+        </tbody>
+      </table>
+    </div>
+
+    <div class="section" id="automation">
+      <h2>Automation Model</h2>
+      <p>
+        The skill should make the useful path automatic without hiding source-of-truth changes from
+        the user. Setup should offer automation levels and explain the tradeoff plainly.
+      </p>
+
+      <h3>Automation Levels</h3>
+      <table>
+        <thead>
+          <tr>
+            <th>Level</th>
+            <th>Behavior</th>
+            <th>Best For</th>
+          </tr>
+        </thead>
+        <tbody>
+          <tr>
+            <td>Manual only</td>
+            <td>No hooks. The user or agent runs <code>/karpathy wiki</code>.</td>
+            <td>Repos that want zero Git hook behavior.</td>
+          </tr>
+          <tr>
+            <td>Remind me when stale</td>
+            <td>Install non-mutating checks that print an actionable reminder when changed files affect wiki concepts.</td>
+            <td>Most users who want automation without files changing behind their back.</td>
+          </tr>
+          <tr>
+            <td>Auto-update before commit</td>
+            <td>Generate affected wiki updates during pre-commit and stage them only after user approval.</td>
+            <td>Users who want wiki updates to land in the same commit as code.</td>
+          </tr>
+          <tr>
+            <td>Auto-update after commit</td>
+            <td>Use post-commit to refresh wiki metadata and leave resulting files dirty for review.</td>
+            <td>Users who want final commit hashes stamped into concepts, accepting a follow-up commit.</td>
+          </tr>
+        </tbody>
+      </table>
+
+      <h3>How Stale Reminders Work</h3>
+      <p>
+        "Remind me when stale" should be a non-mutating safety net. It should never edit files,
+        stage files, or block commits by default. It only detects that the wiki is probably stale
+        and tells the user what to run.
+      </p>
+      <ol>
+        <li>
+          Maintain a lightweight manifest such as <code>knowledge/wiki/.karpathy-wiki.json</code>
+          mapping source paths to concept files, based on <code>resource</code> fields and citations.
+        </li>
+        <li>
+          Install a Git hook, preferably <code>pre-commit</code>, that computes the staged source
+          paths with <code>git diff --cached --name-only</code>.
+        </li>
+        <li>
+          Compare staged paths to the manifest. If no changed source file is referenced by the wiki,
+          print nothing and allow the commit.
+        </li>
+        <li>
+          If changed files map to wiki concepts and those concepts are not staged, print a concise
+          reminder naming the affected concepts and the command to run.
+        </li>
+        <li>
+          Exit successfully by default so the hook is advisory. A repo can opt into strict mode later
+          if it wants stale wiki checks to block commits.
+        </li>
+      </ol>
+      <pre><code>Wiki reminder: 2 concepts may be stale.
+- Billing Lifecycle: knowledge/wiki/workflows/billing-lifecycle.md
+- Billing Test Surface: knowledge/wiki/tests/billing.md
+
+Run:
+  /karpathy wiki
+
+Commit is allowed. This reminder is advisory.</code></pre>
+
+      <h3>Agent Instruction Setup</h3>
+      <p>
+        During setup, the skill should detect <code>AGENTS.md</code>, <code>CLAUDE.md</code>,
+        and tool-specific rule files, then offer to add a compact block so future agents use the
+        wiki without the human remembering to ask. It should never stage or commit those
+        instruction files automatically; the human decides whether they belong in version control.
+      </p>
+      <pre><code>## Repo Wiki
+
+Use /karpathy wiki before non-trivial code changes to orient on relevant components,
+invariants, tests, and risks. If code changes affect documented concepts, update the
+affected wiki pages before finishing. Treat the wiki as advisory: read cited source
+files before editing, and keep changes surgical.</code></pre>
+    </div>
+
+    <div class="section" id="differences">
+      <h2>Differences From Existing Tools</h2>
+      <table>
+        <thead>
+          <tr>
+            <th>System</th>
+            <th>What It Provides</th>
+            <th>Gap for This Use Case</th>
+            <th>What We Add</th>
+          </tr>
+        </thead>
+        <tbody>
+          <tr>
+            <td>OKF</td>
+            <td><span class="status status-good">Format</span> Markdown plus YAML frontmatter, links, indexes, logs, and conformance rules.</td>
+            <td>Does not define a code-repo taxonomy, coding workflow, or update discipline.</td>
+            <td>Use OKF as the substrate and define repo-specific producers, consumers, concept types, and maintenance rules.</td>
+          </tr>
+          <tr>
+            <td>Google Knowledge Catalog samples</td>
+            <td><span class="status status-good">Reference implementation</span> BigQuery enrichment agent, sample bundles, and visualizer.</td>
+            <td>Weighted toward data catalog enrichment, not source-code editing loops.</td>
+            <td>Apply the pattern to code repos, tests, invariants, task recipes, and diff-aware maintenance.</td>
+          </tr>
+          <tr>
+            <td>Graphify-style tools</td>
+            <td><span class="status status-good">Extraction and graph</span> Folder-to-graph conversion, graph report, queryable artifact.</td>
+            <td>May optimize for mapping and Q&amp;A more than disciplined implementation behavior.</td>
+            <td>Task briefs, source verification, Karpathy principles, and integration with audit/diff review.</td>
+          </tr>
+          <tr>
+            <td>ByteRover-style memory</td>
+            <td><span class="status status-good">Agent memory</span> Inspectable local memory for coding agents.</td>
+            <td>Broader memory layer, not necessarily an OKF repo wiki tied to a specific diff loop.</td>
+            <td>Repo-local OKF bundle with task-first retrieval and surgical updates driven by changed files.</td>
+          </tr>
+          <tr>
+            <td>Existing <code>/karpathy:audit</code></td>
+            <td><span class="status status-good">Instruction hygiene</span> Reviews standing agent instructions.</td>
+            <td>Does not compile or query repo knowledge.</td>
+            <td>Wiki rules can be audited; audit can ensure the agent is told how to use the wiki.</td>
+          </tr>
+          <tr>
+            <td>Existing <code>/karpathy:diff</code></td>
+            <td><span class="status status-good">Change hygiene</span> Reviews whether a diff traces to the task.</td>
+            <td>Works after edits; does not reduce bad orientation before edits.</td>
+            <td>Wiki briefs improve pre-edit orientation; diff review can require affected wiki concepts to be updated.</td>
+          </tr>
+          <tr>
+            <td>Human-written docs</td>
+            <td><span class="status status-gap">Manual context</span> Useful when current, concise, and trusted.</td>
+            <td>Humans abandon documentation upkeep because it is repetitive bookkeeping.</td>
+            <td>Agents maintain links, indexes, summaries, and logs as part of the coding workflow.</td>
+          </tr>
+          <tr>
+            <td>Traditional RAG</td>
+            <td><span class="status status-gap">Retrieval infrastructure</span> Scales search and retrieval across large corpora.</td>
+            <td>Can add hidden infrastructure and opaque ranking before a repo needs it.</td>
+            <td>Start with inspectable files and indexes; add search only when the bundle outgrows simple traversal.</td>
+          </tr>
+        </tbody>
+      </table>
+    </div>
+
+    <div class="section" id="design">
+      <h2>Design Principles</h2>
+      <p>
+        The repo knowledge-base skill should apply the same four Karpathy principles to knowledge
+        management.
+      </p>
+      <table>
+        <thead>
+          <tr>
+            <th>Karpathy Principle</th>
+            <th>Wiki Interpretation</th>
+            <th>Practical Rule</th>
+          </tr>
+        </thead>
+        <tbody>
+          <tr>
+            <td>Think Before Coding</td>
+            <td>Orient before editing.</td>
+            <td>For non-trivial tasks, produce a task brief from the wiki before implementation.</td>
+          </tr>
+          <tr>
+            <td>Simplicity First</td>
+            <td>Use simple files before infrastructure.</td>
+            <td>Markdown, YAML, links, indexes, logs. No vector database or graph database in the default path.</td>
+          </tr>
+          <tr>
+            <td>Surgical Changes</td>
+            <td>Update only affected knowledge.</td>
+            <td>After a diff, identify changed concepts and touch only those wiki files.</td>
+          </tr>
+          <tr>
+            <td>Goal-Driven Execution</td>
+            <td>Knowledge must support verification.</td>
+            <td>Concepts should cite source files and name the commands that verify the behavior area.</td>
+          </tr>
+        </tbody>
+      </table>
+
+      <h3>Core Behavioral Contract</h3>
+      <ol>
+        <li>
+          The wiki is advisory. Source code, tests, and explicit user instructions are authoritative.
+        </li>
+        <li>
+          A concept claim that affects implementation must have a citation to source material.
+        </li>
+        <li>
+          The agent may use the wiki to decide where to look, but it must read cited source before editing.
+        </li>
+        <li>
+          The agent should not copy large source files into the wiki. It should summarize and link.
+        </li>
+        <li>
+          Staleness is allowed only when visible: concepts should carry timestamps, source commit hints,
+          confidence, and verification commands where practical.
+        </li>
+      </ol>
+    </div>
+
+    <div class="section" id="mvp">
+      <h2>MVP Scope</h2>
+      <p>
+        The first useful version should be small. It should not try to become a universal repo graph
+        engine on day one.
+      </p>
+      <h3>Must Have</h3>
+      <ul>
+        <li>Create <code>knowledge/wiki/</code> as an OKF-compatible bundle.</li>
+        <li>Generate a root <code>index.md</code> and <code>log.md</code>.</li>
+        <li>Compile concepts from existing docs, tests, package scripts, and obvious source entry points.</li>
+        <li>Use a fixed initial concept vocabulary: <code>Component</code>, <code>Workflow</code>, <code>Invariant</code>, <code>Decision</code>, <code>Test Surface</code>, <code>Task Recipe</code>, and <code>Failure Mode</code>.</li>
+        <li>Produce a task brief that lists likely files, related concepts, risks, and verification commands.</li>
+        <li>After changes, update only concepts tied to changed files.</li>
+        <li>Run a lint pass for broken links, missing <code>type</code>, missing citations for strong claims, and stale source references.</li>
+      </ul>
+
+      <h3>Should Not Have Yet</h3>
+      <ul>
+        <li>No hidden hosted service.</li>
+        <li>No mandatory embeddings.</li>
+        <li>No custom graph database.</li>
+        <li>No promise that the wiki replaces source-code reading.</li>
+        <li>No massive generated encyclopedia that the agent loads wholesale every turn.</li>
+      </ul>
+
+      <h3>Example Task Brief</h3>
+      <pre><code># Task Brief: Add trial expiration handling
+
+## Likely Files
+- src/billing/subscriptions.ts
+- src/api/webhooks/stripe.ts
+- tests/billing/subscriptions.test.ts
+
+## Relevant Concepts
+- [Billing Lifecycle](../wiki/workflows/billing-lifecycle.md)
+- [Stripe Webhook Invariants](../wiki/invariants/stripe-webhooks.md)
+- [Billing Test Surface](../wiki/tests/billing.md)
+
+## Invariants
+- Webhook handlers must be idempotent.
+- Entitlements are derived from subscription state.
+- Raw Stripe request body must be preserved for signature verification.
+
+## Verification
+- npm test -- billing
+- npm run typecheck
+
+## Notes
+- Read the cited source files before editing. The wiki narrows the search; it is not the authority.</code></pre>
+    </div>
+
+    <div class="section" id="risks">
+      <h2>Risks and Guardrails</h2>
+      <table>
+        <thead>
+          <tr>
+            <th>Risk</th>
+            <th>Why It Matters</th>
+            <th>Guardrail</th>
+          </tr>
+        </thead>
+        <tbody>
+          <tr>
+            <td>Wiki drift</td>
+            <td>The agent trusts stale summaries and edits against old assumptions.</td>
+            <td>Store timestamps and source commit hints; lint changed files against affected concepts; require source reads before edits.</td>
+          </tr>
+          <tr>
+            <td>Doc bloat</td>
+            <td>The wiki becomes another token sink and obscures useful facts.</td>
+            <td>Prefer concise concepts, indexes, and task briefs. Do not duplicate full source files.</td>
+          </tr>
+          <tr>
+            <td>False authority</td>
+            <td>Generated prose can sound more certain than the code supports.</td>
+            <td>Require citations for implementation-relevant claims and include confidence fields for inferred knowledge.</td>
+          </tr>
+          <tr>
+            <td>Scope creep</td>
+            <td>The skill becomes a generic knowledge platform instead of a coding aid.</td>
+            <td>Keep MVP focused on repo orientation, task briefs, diff-aware updates, and linting.</td>
+          </tr>
+          <tr>
+            <td>Competing with OKF</td>
+            <td>A custom format would reduce portability and duplicate the emerging standard.</td>
+            <td>Emit conformant OKF and add only producer-defined fields allowed by the spec.</td>
+          </tr>
+        </tbody>
+      </table>
+    </div>
+
+    <div class="section" id="product-bet">
+      <h2>Product Bet</h2>
+      <p>
+        The core bet is that vibe coders do not need another documentation site. They need a local,
+        inspectable repo brain that turns accumulated agent work into better future agent work.
+      </p>
+      <p>
+        The first-order benefit is reduced token waste and faster orientation. The deeper benefit is
+        behavioral: agents start from a task brief grounded in repo-specific invariants, then end by
+        updating the knowledge layer and passing a diff review. That creates a loop where exploration
+        and implementation compound instead of evaporating between sessions.
+      </p>
+      <div class="callout">
+        <p>
+          <strong>Thesis:</strong> The valuable product is not "generate Markdown from a repo." The
+          valuable product is "make every future coding-agent session start with the repo knowledge
+          learned by the previous sessions, while keeping that knowledge cited, local, and diffable."
+        </p>
+      </div>
+    </div>
+
+    <div class="section" id="sources">
+      <h2>Sources and Reference Points</h2>
+      <ul>
+        <li>
+          <a href="https://github.com/GoogleCloudPlatform/knowledge-catalog/blob/main/okf/SPEC.md">Open Knowledge Format v0.1 draft specification</a>
+        </li>
+        <li>
+          <a href="https://cloud.google.com/blog/products/data-analytics/how-the-open-knowledge-format-can-improve-data-sharing">Google Cloud announcement: Introducing the Open Knowledge Format</a>
+        </li>
+        <li>
+          <a href="https://github.com/GoogleCloudPlatform/knowledge-catalog">GoogleCloudPlatform/knowledge-catalog</a>
+        </li>
+        <li>
+          <a href="https://github.com/safishamsi/graphify">safishamsi/graphify</a>
+        </li>
+        <li>
+          <a href="https://github.com/campfirein/byterover-cli">campfirein/byterover-cli</a>
+        </li>
+      </ul>
+    </div>
+
+    <div class="footer">
+      This document is a rationale artifact for the karpathy-skills repository. It intentionally
+      describes a proposed design layer rather than an implemented feature.
+    </div>
+  </div>
+</body>
+</html>

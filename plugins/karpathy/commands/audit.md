@@ -13,4 +13,6 @@ directory. If no `CLAUDE.md` exists, fall back to `AGENTS.md`, then
 
 Follow the karpathy-audit skill's workflow exactly: run the coverage audit and
 the quality audit, produce the report in the skill's report format, then stop
-and ask for approval before editing anything.
+and ask for approval before editing anything. Never stage or commit
+`CLAUDE.md`, `AGENTS.md`, `.cursor/rules`, or other agent instruction / memory
+files; the user decides whether those changes belong in git.

@@ -1,0 +1,20 @@
+{
+  "name": "karpathy-skills",
+  "interface": {
+    "displayName": "Karpathy Skills"
+  },
+  "plugins": [
+    {
+      "name": "karpathy",
+      "source": {
+        "source": "local",
+        "path": "./plugins/karpathy"
+      },
+      "policy": {
+        "installation": "AVAILABLE",
+        "authentication": "ON_INSTALL"
+      },
+      "category": "Productivity"
+    }
+  ]
+}
