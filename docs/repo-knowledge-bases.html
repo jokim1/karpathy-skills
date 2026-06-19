@@ -294,7 +294,7 @@
 <body>
   <div class="page">
     <div class="hero">
-      <p class="eyebrow">Karpathy skills proposal</p>
+      <p class="eyebrow">Karpathy skills rationale</p>
       <h1>Repo Knowledge Bases for Coding Agents</h1>
       <p class="subtitle">
         Context, rationale, and differentiation for adding an OKF-compatible repo knowledge layer
@@ -323,7 +323,7 @@
       <div class="callout">
         <p>
           <strong>Positioning:</strong> OKF is the storage and interchange format. A Karpathy
-          repo knowledge-base skill would be the coding-agent workflow that decides what to
+          repo knowledge-base skill is the coding-agent workflow that decides what to
           capture, when to consult it, how to verify it, and how to update it without drifting
           away from source code.
         </p>
@@ -349,7 +349,7 @@
     <div class="section" id="background">
       <h2>Background</h2>
       <p>
-        The current repository contains two skills based on Andrej Karpathy's coding-agent
+        The current repository contains three skills based on Andrej Karpathy's coding-agent
         principles:
       </p>
       <ul>
@@ -365,11 +365,11 @@
         </li>
       </ul>
       <p>
-        These skills address two important failure points: bad standing instructions and bad
-        generated diffs. They do not yet address the repeated orientation problem that happens
-        before coding starts: every agent session re-reads the same files, rebuilds the same
-        mental map, misses relationships across files, and spends tokens discovering context that
-        should have accumulated.
+        The audit and diff skills address two important failure points: bad standing instructions
+        and bad generated diffs. The wiki MVP addresses the repeated orientation problem that
+        happens before coding starts: every agent session re-reads the same files, rebuilds the
+        same mental map, misses relationships across files, and spends tokens discovering context
+        that should have accumulated.
       </p>
       <p>
         Karpathy's LLM Knowledge Base pattern points at that missing layer. Raw material is stored
@@ -454,7 +454,7 @@
       </p>
       <p>
         The important distinction is that a graph generator is usually optimized for extraction and
-        query. The proposed Karpathy repo knowledge layer is optimized for disciplined coding-agent
+        query. The Karpathy repo knowledge layer is optimized for disciplined coding-agent
         behavior before, during, and after edits.
       </p>
 
@@ -465,7 +465,7 @@
         without a hidden vector database.
       </p>
       <p>
-        The proposed layer should learn from that design, but stay narrower: repo-local,
+        This layer should learn from that design, but stay narrower: repo-local,
         OKF-compatible, task-brief-first, and integrated with Karpathy audit and diff review.
       </p>
 
@@ -481,11 +481,17 @@
     <div class="section" id="building">
       <h2>What We Are Building</h2>
       <p>
-        Build a third Karpathy skill: <code>/karpathy:wiki</code>. The skill maintains an
+        The third Karpathy skill is <code>/karpathy:wiki</code>. The skill maintains an
         OKF-compatible repo knowledge bundle and uses it to produce implementation briefs before
         coding. It should make agents more deliberate, more surgical, and easier for vibe coders to
         supervise.
       </p>
+      <div class="callout">
+        <strong>Implementation status:</strong> v1.2.0 ships the first MVP: wiki scaffold,
+        manifest generation, search, doctor checks, and advisory stale reminders. Semantic concept
+        writing, task briefs, Q&amp;A, and surgical wiki updates are LLM-led workflows guided by the
+        skill; the helper script intentionally does not try to understand arbitrary repos by itself.
+      </div>
 
       <h3>Proposed Directory Shape</h3>
       <pre><code>knowledge/
@@ -569,7 +575,7 @@
 type: Component
 title: Session Authentication
 description: Validates session tokens and attaches the current user to request context.
-resource: ../../src/auth/session.ts
+resource: ../../../src/auth/session.ts
 tags: [auth, middleware, security]
 timestamp: 2026-06-19T00:00:00Z
 source_commit: abc123
@@ -599,8 +605,8 @@ Gives task recipes for common edits.
 
 # Citations
 
-[1] [session.ts](../../src/auth/session.ts)
-[2] [session tests](../../tests/auth/session.test.ts)</code></pre>
+[1] [session.ts](../../../src/auth/session.ts)
+[2] [session tests](../../../tests/auth/session.test.ts)</code></pre>
 
       <h3>Command Surface</h3>
       <p>
@@ -688,7 +694,7 @@ Gives task recipes for common edits.
       <h2>End-to-End User Journeys</h2>
       <p>
         The guiding UX rule is that the user remembers one command and the skill handles mode
-        selection. The command should accept both colon and space forms: <code>/karpathy:wiki</code>
+        selection. The command accepts the colon form and documents the human-friendly space form: <code>/karpathy:wiki</code>
         and <code>/karpathy wiki</code>.
       </p>
 
@@ -728,10 +734,9 @@ Gives task recipes for common edits.
             <td><code>yes</code> to setup</td>
             <td>
               "Automation level: 1. Manual only. 2. Remind me when the wiki is stale.
-              3. Auto-update affected wiki pages before commit. 4. Auto-update after commit and
-              leave changes for review."
+              3. Strict stale reminder that blocks commits until the wiki is reviewed."
             </td>
-            <td>Offer automation as a setup choice instead of requiring the user to remember maintenance commands.</td>
+            <td>Offer automation as a setup choice while keeping semantic wiki edits in the normal agent approval flow.</td>
           </tr>
         </tbody>
       </table>
@@ -849,14 +854,14 @@ Gives task recipes for common edits.
             <td>Most users who want automation without files changing behind their back.</td>
           </tr>
           <tr>
-            <td>Auto-update before commit</td>
-            <td>Generate affected wiki updates during pre-commit and stage them only after user approval.</td>
-            <td>Users who want wiki updates to land in the same commit as code.</td>
+            <td>Strict stale reminder</td>
+            <td>Block commits when changed files affect wiki concepts, but still do not edit files automatically.</td>
+            <td>Repos that explicitly prefer enforcement over advisory reminders.</td>
           </tr>
           <tr>
-            <td>Auto-update after commit</td>
-            <td>Use post-commit to refresh wiki metadata and leave resulting files dirty for review.</td>
-            <td>Users who want final commit hashes stamped into concepts, accepting a follow-up commit.</td>
+            <td>Agent-initiated update</td>
+            <td><code>/karpathy:wiki</code> detects stale concepts, proposes edits, asks approval, and updates only affected pages.</td>
+            <td>Most teams that want useful automation without hiding semantic edits in Git hooks.</td>
           </tr>
         </tbody>
       </table>
@@ -885,8 +890,8 @@ Gives task recipes for common edits.
           reminder naming the affected concepts and the command to run.
         </li>
         <li>
-          Exit successfully by default so the hook is advisory. A repo can opt into strict mode later
-          if it wants stale wiki checks to block commits.
+          Exit successfully by default so the hook is advisory. A repo can opt into strict mode
+          if it wants stale wiki checks to block commits, but the hook still must not edit files.
         </li>
       </ol>
       <pre><code>Wiki reminder: 2 concepts may be stale.
@@ -894,7 +899,9 @@ Gives task recipes for common edits.
 - Billing Test Surface: knowledge/wiki/tests/billing.md
 
 Run:
-  /karpathy wiki
+  /karpathy:wiki
+or type:
+  karpathy wiki
 
 Commit is allowed. This reminder is advisory.</code></pre>
 
@@ -907,10 +914,11 @@ Commit is allowed. This reminder is advisory.</code></pre>
       </p>
       <pre><code>## Repo Wiki
 
-Use /karpathy wiki before non-trivial code changes to orient on relevant components,
-invariants, tests, and risks. If code changes affect documented concepts, update the
-affected wiki pages before finishing. Treat the wiki as advisory: read cited source
-files before editing, and keep changes surgical.</code></pre>
+Use /karpathy:wiki before non-trivial code changes to orient on relevant components,
+invariants, tests, and risks. You can also type "karpathy wiki" as plain text.
+If code changes affect documented concepts, update the affected wiki pages before
+finishing. Treat the wiki as advisory: read cited source files before editing,
+and keep changes surgical.</code></pre>
     </div>
 
     <div class="section" id="differences">
@@ -1171,8 +1179,8 @@ files before editing, and keep changes surgical.</code></pre>
     </div>
 
     <div class="footer">
-      This document is a rationale artifact for the karpathy-skills repository. It intentionally
-      describes a proposed design layer rather than an implemented feature.
+      This document is a rationale artifact for the karpathy-skills repository. It describes the
+      shipped v1.2.0 wiki MVP and the remaining design direction for future slices.
     </div>
   </div>
 </body>

@@ -7,19 +7,15 @@ The goal is simple: when an AI agent writes code for you, these skills help you
 catch the common failure modes before they turn into bugs, bloated code, or
 messy commits.
 
-This repo currently ships one plugin, `karpathy`, with two implemented skills:
+This repo ships one plugin, `karpathy`, with three skills:
 
 - `/karpathy:audit` - reviews your AI agent instruction files.
 - `/karpathy:diff` - reviews AI-generated code changes before you commit.
-
-It also documents the planned third skill:
-
 - `/karpathy:wiki` - a repo wiki / memory layer for helping agents understand
   the codebase before they edit it.
 
-The wiki skill is designed in detail in
-[docs/repo-knowledge-bases.html](docs/repo-knowledge-bases.html), but it is not
-implemented in the plugin yet.
+The wiki skill's product rationale and longer-term design are documented in
+[docs/repo-knowledge-bases.html](docs/repo-knowledge-bases.html).
 
 ---
 
@@ -53,7 +49,7 @@ The four principles behind the plugin are:
 | --- | --- | --- | --- | --- |
 | `/karpathy:audit` | Shipped | A review of your `CLAUDE.md`, `AGENTS.md`, or Cursor rules. | Making sure your agent instructions are clear, current, and useful. | Better standing instructions, fewer vague rules, less stale context. |
 | `/karpathy:diff` | Shipped | A review of the code changes an AI agent just made. | Catching scope creep before you commit. | Smaller diffs, fewer surprise edits, safer commits. |
-| `/karpathy:wiki` | Designed, not shipped yet | A local repo wiki that the agent maintains and reads before coding. | Helping the agent understand your project without rereading everything every time. | Faster orientation, better task briefs, less repeated context work. |
+| `/karpathy:wiki` | Shipped MVP | A local repo wiki that the agent maintains and reads before coding. | Helping the agent understand your project without rereading everything every time. | Faster orientation, better task briefs, less repeated context work. |
 
 If you only remember one thing:
 
@@ -138,6 +134,7 @@ export KARPATHY_DISABLE_UPDATE_CHECK=1
 ```text
 /karpathy:audit [path]
 /karpathy:diff [ref/path]
+/karpathy:wiki [question/task/doctor]
 ```
 
 You can also ask in normal words:
@@ -146,6 +143,7 @@ You can also ask in normal words:
 audit my AGENTS.md
 review my changes before I commit
 did the agent touch anything it should not have?
+karpathy wiki how does auth work?
 ```
 
 Claude Code command form:
@@ -153,6 +151,7 @@ Claude Code command form:
 ```text
 /karpathy:audit
 /karpathy:diff
+/karpathy:wiki
 ```
 
 Human-friendly phrasing that should also trigger the skills:
@@ -160,7 +159,12 @@ Human-friendly phrasing that should also trigger the skills:
 ```text
 karpathy audit
 karpathy diff
+karpathy wiki
 ```
+
+Some clients may reject `/karpathy wiki` as a slash command because plugin
+commands are namespaced with a colon. If that happens, use `/karpathy:wiki` or
+type `karpathy wiki` as normal text.
 
 ---
 
@@ -339,6 +343,27 @@ This is the daily-driver skill.
 | Missing verification | A bug fix has no test or command showing it is fixed. |
 | Orphans | The change leaves unused imports or variables behind. |
 
+### Why It Helps
+
+Normal code review asks whether the code is good. That matters, but it is not
+the first failure mode for AI-generated code.
+
+`/karpathy:diff` asks the narrower question first:
+
+```text
+Did this change do only what was asked?
+```
+
+That catches problems that can look harmless in a normal review:
+
+| Advantage | What It Prevents |
+| --- | --- |
+| Smaller diffs | Less unrelated code for you to review and debug. |
+| Fewer surprise edits | The agent cannot quietly change neighboring systems. |
+| Better commit hygiene | Real work and drive-by cleanup do not get mixed together. |
+| Safer acceptance | You can reject only the bad hunks instead of distrusting the whole change. |
+| Better agent behavior over time | The agent gets trained by the review loop to stay surgical. |
+
 ### Example Use
 
 ```text
@@ -375,12 +400,12 @@ Want me to apply the proposed fixes?
 
 ---
 
-## Skill 3: `/karpathy:wiki` (Designed, Not Shipped Yet)
+## Skill 3: `/karpathy:wiki`
 
-### What It Will Do
+### What It Does
 
-`/karpathy:wiki` is the planned third skill. It applies Karpathy's LLM knowledge
-base pattern to code repositories.
+`/karpathy:wiki` applies Karpathy's LLM knowledge-base pattern to code
+repositories.
 
 The idea:
 
@@ -393,7 +418,20 @@ The idea:
 This is meant to help vibe coders who want the agent to understand a project
 without manually writing and maintaining a big documentation site.
 
-### Why The Command Will Be Simple
+The shipped MVP includes:
+
+- A `knowledge/wiki/` scaffold with OKF-style Markdown files.
+- A generated wiki manifest at `knowledge/wiki/.karpathy-wiki.json`.
+- A deterministic helper for status, search, doctor checks, manifest refresh,
+  repo scans, affected-concept plans, and advisory stale reminders.
+- A skill workflow that tells the agent how to create starter concepts, answer
+  questions, write task briefs, and update only affected wiki pages.
+
+The MVP does **not** include a hosted service, embeddings, a graph database, or
+fully automatic semantic repo understanding. The agent still has to read source
+files and cite them.
+
+### Why The Command Is Simple
 
 The first design used several commands:
 
@@ -412,33 +450,38 @@ The better UX is:
 
 ```text
 /karpathy:wiki
-/karpathy wiki
+karpathy wiki
 ```
 
-The skill decides what to do based on context.
+The skill decides what to do based on context. In clients that accept
+human-friendly slash phrasing, `/karpathy wiki` should also trigger it. If the
+client rejects that as an invalid slash command, use `/karpathy:wiki`.
 
-### Planned User Journeys
+### User Journeys
 
 | User Enters | Skill Interprets It As | Skill Returns |
 | --- | --- | --- |
-| `/karpathy wiki` | No wiki exists | A setup prompt for `knowledge/wiki/`. |
-| `/karpathy wiki add trial expiration handling` | Coding task | A task brief with files, risks, invariants, and tests. |
-| `/karpathy wiki how does auth work?` | Repo question | A cited answer from the wiki and source files. |
-| `/karpathy wiki` after code changes | Wiki update | A proposed update to only affected wiki pages. |
-| `/karpathy wiki doctor` | Health check | Broken links, stale pages, uncited claims, and proposed fixes. |
+| `/karpathy:wiki` | No wiki exists | A setup prompt for `knowledge/wiki/`. |
+| `/karpathy:wiki add trial expiration handling` | Coding task | A task brief with files, risks, invariants, and tests. |
+| `/karpathy:wiki how does auth work?` | Repo question | A cited answer from the wiki and source files. |
+| `/karpathy:wiki` after code changes | Wiki update | A proposed update to only affected wiki pages. |
+| `/karpathy:wiki doctor` | Health check | Broken links, stale pages, uncited claims, and proposed fixes. |
 
-### Planned Automation
+### Automation
 
-During setup, the wiki skill should offer:
+During setup, the wiki skill offers:
 
 | Option | Meaning |
 | --- | --- |
-| Manual only | User runs `/karpathy wiki` when they want it. |
+| Manual only | User runs `/karpathy:wiki` when they want it. |
 | Remind me when stale | A non-blocking git hook warns when changed files may make wiki pages stale. |
-| Auto-update before commit | The agent proposes affected wiki updates before commit. |
-| Auto-update after commit | The agent refreshes metadata after commit and leaves changes for review. |
+| Strict stale reminder | An optional advanced hook mode that blocks commits until the user runs `/karpathy:wiki`. |
 
-The planned stale reminder is advisory. It should print something like:
+The hook never asks an LLM to edit files, never stages wiki changes, and never
+updates `CLAUDE.md`, `AGENTS.md`, or rule files. Semantic wiki updates happen
+through the normal `/karpathy:wiki` agent flow so the user can review them.
+
+The stale reminder is advisory. It prints something like:
 
 ```text
 Wiki reminder: 2 concepts may be stale.
@@ -446,7 +489,9 @@ Wiki reminder: 2 concepts may be stale.
 - Billing Test Surface: knowledge/wiki/tests/billing.md
 
 Run:
-  /karpathy wiki
+  /karpathy:wiki
+or type:
+  karpathy wiki
 
 Commit is allowed. This reminder is advisory.
 ```
@@ -464,8 +509,8 @@ For most vibe coders:
 2. Run `/karpathy:audit` once on your project instructions.
 3. Keep using your AI coding agent normally.
 4. Run `/karpathy:diff` before accepting or committing AI-generated code.
-5. When `/karpathy:wiki` ships, use it before larger tasks so the agent starts
-   with better repo context.
+5. Run `/karpathy:wiki` before larger tasks so the agent starts with better
+   repo context.
 
 Simple habit:
 
@@ -528,22 +573,22 @@ that look reasonable at a glance.
 
 Traditional docs rot because humans stop updating them.
 
-The planned `/karpathy:wiki` skill follows the LLM wiki pattern: let the agent
-maintain a small local Markdown wiki, with citations back to source files, so
-repo knowledge accumulates over time.
+`/karpathy:wiki` follows the LLM wiki pattern: let the agent maintain a small
+local Markdown wiki, with citations back to source files, so repo knowledge
+accumulates over time.
 
 ### Compared To OKF, Graphify, And Memory Tools
 
 Google's Open Knowledge Format (OKF) gives a simple file format for Markdown
-knowledge bundles. That is useful, and the planned wiki skill should use it
-rather than inventing a competing format.
+knowledge bundles. That is useful, and the wiki skill uses the same plain
+Markdown plus frontmatter approach rather than inventing a competing format.
 
 Graphify-style tools are strong at turning a folder into a graph you can query.
-The planned wiki skill is narrower: it is about coding-agent behavior before,
-during, and after edits.
+The wiki skill is narrower: it is about coding-agent behavior before, during,
+and after edits.
 
-ByteRover-style tools are broader agent memory systems. The planned wiki skill
-is repo-local, file-based, and tied to the Karpathy audit/diff loop.
+ByteRover-style tools are broader agent memory systems. The wiki skill is
+repo-local, file-based, and tied to the Karpathy audit/diff loop.
 
 ---
 
@@ -555,7 +600,7 @@ This project is based on several public ideas and tools:
 | --- | --- | --- |
 | [Andrej Karpathy's public coding-agent observations][karpathy-post] | The core failure modes: silent assumptions, overbuilding, collateral edits, missing verification. | Turned the ideas into runnable audit and diff-review workflows. |
 | [multica-ai/andrej-karpathy-skills][orig-repo] | A clear expression of Karpathy-style guidance for agent instruction files. | Built checking tools instead of only distributing guidance. |
-| [Open Knowledge Format][okf-spec] | The planned repo wiki should use plain Markdown, YAML frontmatter, links, indexes, and logs. | Use OKF as a storage format, not as the whole product. |
+| [Open Knowledge Format][okf-spec] | The repo wiki uses plain Markdown, YAML frontmatter, links, indexes, and logs. | Use OKF as a storage pattern, not as the whole product. |
 | [Google's OKF announcement][okf-announcement] | The idea that LLM-maintained wikis can be portable, local, and agent-friendly. | Apply the pattern specifically to coding-agent repo workflows. |
 | [Graphify][graphify] | Folder-to-graph and codebase Q&A are useful for orientation. | Focus on task briefs, source citations, and diff-aware maintenance. |
 | [ByteRover CLI][byterover] | Inspectable, file-based agent memory is better than a black box. | Keep the first version repo-local and lightweight. |
@@ -566,30 +611,51 @@ This project is based on several public ideas and tools:
 
 ## Evaluation Results
 
-`/karpathy:audit` was benchmarked before release on three instruction-file test
-cases:
+`/karpathy:audit` was benchmarked before release. Three `CLAUDE.md` test files
+were each audited twice, once with the skill and once with an unaided baseline
+(capable Claude, no skill), and scored against 16 objective assertions.
+
+The test files:
 
 | Test File | What It Stressed |
 | --- | --- |
-| Bloated file | Generic advice, repetition, vague rules, no verification commands. |
-| Contradictions + stale content | Contradictory rules, vague guidance, dated sprint notes. |
-| Already-good file | A lean file that should be left alone. |
+| Bloated file | Padded with generic advice, repetition, vague rules, no verification commands. |
+| Contradictions + stale content | Two flat contradictions, a vague rule, a dated sprint section. |
+| Already-good file | A genuinely lean, well-built file that needs nothing. This is a false-positive test. |
 
 Summary:
 
-| Metric | With `karpathy` Skill | Baseline Without Skill |
+| Metric | With karpathy skill | Baseline, no skill | Delta |
+| --- | --- | --- | --- |
+| Pass rate | 100% | 69% | +31 pts |
+| Avg time | 62.1s | 31.1s | +31s |
+| Avg tokens | 40,274 | 30,707 | +9,567 |
+
+Per-test breakdown:
+
+| Test File | With Skill | Baseline |
 | --- | --- | --- |
-| Pass rate | 100% | 69% |
-| Average time | 62.1s | 31.1s |
-| Average tokens | 40,274 | 30,707 |
+| Bloated file | 6 / 6 | 4 / 6 |
+| Contradictions + stale content | 6 / 6 | 5 / 6 |
+| Already-good file | 4 / 4 | 2 / 4 |
+| Total | 16 / 16 (100%) | 11 / 16 (69%) |
 
-The important result was not just catching bad files. It was leaving the good
-file alone. The skill returned zero quality findings on the already-good file,
-where the baseline still invented extra suggestions.
+What the numbers actually show: the unaided baseline is no fool. It caught the
+contradictions and the bloat on its own. Where the skill pulls ahead is
+consistency and calibration: it always produces a coverage score,
+severity-ranked findings, and the global-vs-project-memory nuance, where the
+baseline's review format drifted from run to run.
 
-Caveat: this was a small benchmark. It is directional evidence, not a full
-academic evaluation. `/karpathy:diff` is newer and has not been benchmarked in
-the same way yet.
+The most telling case is the third test, the file that was already good. The
+baseline rated it "good" but still appended five suggestions and skipped
+coverage scoring. The skill returned zero quality findings and "ship as-is."
+Not manufacturing work on a healthy file is the hardest behavior to get right,
+and it is the clearest thing the skill adds.
+
+Honest caveats: this is one run per cell. It is directional evidence, not a
+statistically robust benchmark. The skill also roughly doubles wall-clock time
+and adds about 30% more tokens, because it does more work. `/karpathy:diff` is
+newer and not yet benchmarked; it follows the same report-then-approve design.
 
 ---
 
@@ -603,7 +669,7 @@ karpathy-skills/
 |-- .claude-plugin/
 |   `-- marketplace.json          # Claude Code marketplace catalog
 |-- docs/
-|   `-- repo-knowledge-bases.html # planned wiki skill rationale
+|   `-- repo-knowledge-bases.html # wiki skill rationale and longer-term design
 `-- plugins/
     `-- karpathy/
         |-- .codex-plugin/
@@ -612,7 +678,8 @@ karpathy-skills/
         |   `-- plugin.json       # Claude Code plugin manifest
         |-- commands/
         |   |-- audit.md          # /karpathy:audit command
-        |   `-- diff.md           # /karpathy:diff command
+        |   |-- diff.md           # /karpathy:diff command
+        |   `-- wiki.md           # /karpathy:wiki command
         |-- hooks/
         |   `-- hooks.json        # advisory update-check hook
         |-- scripts/
@@ -620,8 +687,12 @@ karpathy-skills/
         `-- skills/
             |-- karpathy-audit/
             |   `-- SKILL.md
-            `-- karpathy-diff/
-                `-- SKILL.md
+            |-- karpathy-diff/
+            |   `-- SKILL.md
+            `-- karpathy-wiki/
+                |-- SKILL.md
+                `-- scripts/
+                    `-- wiki_tool.py
 ```
 
 ---

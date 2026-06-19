@@ -8,15 +8,15 @@
     {
       "name": "karpathy",
       "source": "./plugins/karpathy",
-      "description": "Operationalizes Andrej Karpathy's four LLM-coding principles. /karpathy:audit reviews a CLAUDE.md or AGENTS.md instruction file for principle coverage and file quality; /karpathy:diff reviews an in-progress code change before you commit it — catching scope creep, drive-by refactors, unexplained deletions, over-engineering, and missing verification. Includes an advisory update checker for Claude Code and Codex installs.",
-      "version": "1.1.0",
+      "description": "Operationalizes Andrej Karpathy's LLM-coding principles. /karpathy:audit reviews agent instruction files; /karpathy:diff reviews in-progress code changes before commit; /karpathy:wiki creates and maintains a local repo knowledge base for task briefs, Q&A, stale reminders, and wiki health checks. Includes an advisory update checker for Claude Code and Codex installs.",
+      "version": "1.2.0",
       "author": {
         "name": "Joseph Kim"
       },
       "homepage": "https://github.com/jokim1/karpathy-skills",
       "repository": "https://github.com/jokim1/karpathy-skills",
       "license": "MIT",
-      "keywords": ["karpathy", "claude-md", "agents-md", "audit", "diff", "code-review", "agent-instructions", "codex"],
+      "keywords": ["karpathy", "claude-md", "agents-md", "audit", "diff", "wiki", "knowledge-base", "code-review", "agent-instructions", "codex"],
       "category": "productivity"
     }
   ]

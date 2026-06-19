@@ -1,0 +1,265 @@
+import importlib.util
+import os
+import shutil
+import subprocess
+import sys
+import tempfile
+import unittest
+from pathlib import Path
+
+
+sys.dont_write_bytecode = True
+
+REPO_ROOT = Path(__file__).resolve().parents[1]
+SCRIPT = REPO_ROOT / "plugins" / "karpathy" / "skills" / "karpathy-wiki" / "scripts" / "wiki_tool.py"
+
+spec = importlib.util.spec_from_file_location("wiki_tool", SCRIPT)
+wiki_tool = importlib.util.module_from_spec(spec)
+assert spec.loader is not None
+sys.modules["wiki_tool"] = wiki_tool
+spec.loader.exec_module(wiki_tool)
+
+
+def run(args, cwd, check=True):
+    env = os.environ.copy()
+    env["PYTHONDONTWRITEBYTECODE"] = "1"
+    return subprocess.run(args, cwd=cwd, text=True, capture_output=True, check=check, env=env)
+
+
+def git(repo, *args):
+    return run(["git", *args], repo)
+
+
+class WikiToolTests(unittest.TestCase):
+    def setUp(self):
+        self.tempdir = tempfile.TemporaryDirectory()
+        self.repo = Path(self.tempdir.name)
+        git(self.repo, "init")
+        git(self.repo, "config", "user.email", "test@example.com")
+        git(self.repo, "config", "user.name", "Test User")
+        (self.repo / "README.md").write_text("# Test Repo\n", encoding="utf-8")
+        git(self.repo, "add", "README.md")
+        git(self.repo, "commit", "-m", "init")
+
+    def tearDown(self):
+        self.tempdir.cleanup()
+
+    def write_concept(self, relative_path, resource, title="Auth Concept", body=""):
+        path = self.repo / relative_path
+        path.parent.mkdir(parents=True, exist_ok=True)
+        path.write_text(
+            "\n".join(
+                [
+                    "---",
+                    "type: Component",
+                    f"title: {title}",
+                    "description: Tracks auth behavior.",
+                    f"resource: {resource}",
+                    "timestamp: 2026-06-19T00:00:00Z",
+                    "confidence: high",
+                    "---",
+                    "",
+                    "# Role",
+                    body,
+                    "",
+                ]
+            ),
+            encoding="utf-8",
+        )
+        return path
+
+    def test_init_creates_structure_and_does_not_overwrite_existing_files(self):
+        first = wiki_tool.init_wiki(self.repo)
+        self.assertTrue((self.repo / "knowledge" / "wiki" / "index.md").exists())
+        self.assertTrue((self.repo / "knowledge" / "wiki" / "components").is_dir())
+        self.assertIn("knowledge/wiki/.karpathy-wiki.json", first["created"])
+
+        index = self.repo / "knowledge" / "wiki" / "index.md"
+        index.write_text("custom index\n", encoding="utf-8")
+        second = wiki_tool.init_wiki(self.repo)
+
+        self.assertEqual("custom index\n", index.read_text(encoding="utf-8"))
+        self.assertIn("knowledge/wiki/index.md", second["skipped"])
+
+    def test_refresh_manifest_indexes_file_resources(self):
+        (self.repo / "src").mkdir()
+        (self.repo / "src" / "auth.ts").write_text("export const auth = true;\n", encoding="utf-8")
+        self.write_concept("knowledge/wiki/components/auth.md", "../../../src/auth.ts")
+
+        manifest = wiki_tool.save_manifest(self.repo)
+
+        self.assertIn("src/auth.ts", manifest["source_map"])
+        self.assertEqual(["knowledge/wiki/components/auth.md"], manifest["source_map"]["src/auth.ts"])
+
+    def test_refresh_manifest_indexes_directory_resources(self):
+        (self.repo / "src" / "auth").mkdir(parents=True)
+        (self.repo / "src" / "auth" / "session.ts").write_text("export const session = true;\n", encoding="utf-8")
+        self.write_concept("knowledge/wiki/components/auth.md", "../../../src/auth")
+
+        manifest = wiki_tool.save_manifest(self.repo)
+
+        self.assertIn("src/auth", manifest["source_map"])
+        self.assertEqual(["knowledge/wiki/components/auth.md"], manifest["source_map"]["src/auth"])
+        self.assertEqual("directory", manifest["source_kinds"]["src/auth"])
+
+    def test_affected_concepts_matches_exact_file_resources(self):
+        (self.repo / "src").mkdir()
+        (self.repo / "src" / "user.ts").write_text("export const user = true;\n", encoding="utf-8")
+        self.write_concept("knowledge/wiki/components/user.md", "../../../src/user.ts", title="User Concept")
+        manifest = wiki_tool.save_manifest(self.repo)
+
+        affected = wiki_tool.affected_concepts(self.repo, ["src/user.ts"], manifest)
+
+        self.assertEqual({"knowledge/wiki/components/user.md": ["src/user.ts"]}, affected)
+
+    def test_affected_concepts_matches_files_inside_cited_directories(self):
+        (self.repo / "src" / "auth").mkdir(parents=True)
+        (self.repo / "src" / "auth" / "session.ts").write_text("export const session = true;\n", encoding="utf-8")
+        self.write_concept("knowledge/wiki/components/auth.md", "../../../src/auth")
+        manifest = wiki_tool.save_manifest(self.repo)
+
+        affected = wiki_tool.affected_concepts(self.repo, ["src/auth/session.ts"], manifest)
+
+        self.assertEqual({"knowledge/wiki/components/auth.md": ["src/auth/session.ts"]}, affected)
+
+    def test_affected_concepts_matches_deleted_files_from_persisted_directory_resources(self):
+        (self.repo / "src" / "auth").mkdir(parents=True)
+        (self.repo / "src" / "auth" / "session.ts").write_text("export const session = true;\n", encoding="utf-8")
+        self.write_concept("knowledge/wiki/components/auth.md", "../../../src/auth")
+        manifest = wiki_tool.save_manifest(self.repo)
+        shutil.rmtree(self.repo / "src" / "auth")
+
+        affected = wiki_tool.affected_concepts(self.repo, ["src/auth/session.ts"], manifest)
+
+        self.assertEqual({"knowledge/wiki/components/auth.md": ["src/auth/session.ts"]}, affected)
+
+    def test_status_reports_untracked_files_inside_cited_directories(self):
+        (self.repo / "src" / "auth").mkdir(parents=True)
+        self.write_concept("knowledge/wiki/components/auth.md", "../../../src/auth")
+        wiki_tool.save_manifest(self.repo)
+        (self.repo / "src" / "auth" / "new.ts").write_text("export const created = true;\n", encoding="utf-8")
+
+        result = wiki_tool.status(self.repo)
+
+        self.assertEqual({"knowledge/wiki/components/auth.md": ["src/auth/new.ts"]}, result["affected_concepts"])
+
+    def test_status_reports_deleted_files_inside_cited_directories(self):
+        (self.repo / "src" / "auth").mkdir(parents=True)
+        (self.repo / "src" / "auth" / "session.ts").write_text("export const session = true;\n", encoding="utf-8")
+        self.write_concept("knowledge/wiki/components/auth.md", "../../../src/auth")
+        wiki_tool.save_manifest(self.repo)
+        git(self.repo, "add", "src", "knowledge")
+        git(self.repo, "commit", "-m", "add wiki")
+        shutil.rmtree(self.repo / "src" / "auth")
+
+        result = wiki_tool.status(self.repo)
+
+        self.assertEqual({"knowledge/wiki/components/auth.md": ["src/auth/session.ts"]}, result["affected_concepts"])
+
+    def test_update_plan_default_scope_includes_untracked_files(self):
+        (self.repo / "src" / "auth").mkdir(parents=True)
+        self.write_concept("knowledge/wiki/components/auth.md", "../../../src/auth")
+        wiki_tool.save_manifest(self.repo)
+        (self.repo / "src" / "auth" / "new.ts").write_text("export const created = true;\n", encoding="utf-8")
+
+        result = wiki_tool.affected_report(self.repo)
+
+        self.assertEqual("all", result["scope"])
+        self.assertEqual({"knowledge/wiki/components/auth.md": ["src/auth/new.ts"]}, result["affected_concepts"])
+
+    def test_doctor_reports_missing_wiki(self):
+        result = wiki_tool.doctor(self.repo)
+
+        self.assertIn(
+            {"severity": "critical", "path": "knowledge/wiki", "message": "wiki directory does not exist"},
+            result["issues"],
+        )
+
+    def test_doctor_reports_broken_local_links_and_missing_frontmatter(self):
+        (self.repo / "knowledge" / "wiki" / "components").mkdir(parents=True)
+        (self.repo / "knowledge" / "wiki" / "index.md").write_text("# Index\n", encoding="utf-8")
+        (self.repo / "knowledge" / "wiki" / "log.md").write_text("# Log\n", encoding="utf-8")
+        (self.repo / "knowledge" / "wiki" / "components" / "bad.md").write_text(
+            "# Bad\n[missing](missing.md)\n",
+            encoding="utf-8",
+        )
+
+        result = wiki_tool.doctor(self.repo)
+        messages = [issue["message"] for issue in result["issues"]]
+
+        self.assertIn("missing YAML frontmatter", messages)
+        self.assertIn("broken local link: missing.md", messages)
+        self.assertIn("missing frontmatter field: type", messages)
+
+    def test_doctor_reports_stale_persisted_manifest(self):
+        (self.repo / "src").mkdir()
+        (self.repo / "src" / "old.ts").write_text("old\n", encoding="utf-8")
+        (self.repo / "src" / "new.ts").write_text("new\n", encoding="utf-8")
+        concept = self.write_concept("knowledge/wiki/components/auth.md", "../../../src/old.ts")
+        wiki_tool.save_manifest(self.repo)
+        concept.write_text(concept.read_text(encoding="utf-8").replace("../../../src/old.ts", "../../../src/new.ts"), encoding="utf-8")
+
+        result = wiki_tool.doctor(self.repo)
+        issues = [(issue["path"], issue["message"]) for issue in result["issues"]]
+
+        self.assertIn(
+            ("knowledge/wiki/.karpathy-wiki.json", "persisted manifest is stale; run refresh-manifest"),
+            issues,
+        )
+
+    def test_reminder_hook_prints_canonical_command_and_exits_zero_by_default(self):
+        (self.repo / "src").mkdir()
+        source = self.repo / "src" / "auth.ts"
+        source.write_text("export const auth = true;\n", encoding="utf-8")
+        self.write_concept("knowledge/wiki/components/auth.md", "../../../src/auth.ts")
+        wiki_tool.save_manifest(self.repo)
+        git(self.repo, "add", "src/auth.ts")
+
+        result = run([sys.executable, str(SCRIPT), "reminder-hook", "--repo", str(self.repo)], self.repo, check=False)
+
+        self.assertEqual(0, result.returncode)
+        self.assertIn("/karpathy:wiki", result.stdout)
+        self.assertIn("karpathy wiki", result.stdout)
+        self.assertIn("Commit is allowed", result.stdout)
+
+    def test_reminder_hook_strict_message_does_not_require_env_var(self):
+        (self.repo / "src").mkdir()
+        source = self.repo / "src" / "auth.ts"
+        source.write_text("export const auth = true;\n", encoding="utf-8")
+        self.write_concept("knowledge/wiki/components/auth.md", "../../../src/auth.ts")
+        wiki_tool.save_manifest(self.repo)
+        git(self.repo, "add", "src/auth.ts")
+
+        result = run([sys.executable, str(SCRIPT), "reminder-hook", "--repo", str(self.repo), "--strict"], self.repo, check=False)
+
+        self.assertEqual(1, result.returncode)
+        self.assertIn("strict stale-wiki mode is enabled", result.stdout)
+        self.assertNotIn("KARPATHY_WIKI_STRICT=1", result.stdout)
+
+    def test_install_hook_is_idempotent_and_respects_core_hooks_path(self):
+        first = wiki_tool.install_hook(self.repo, SCRIPT)
+        second = wiki_tool.install_hook(self.repo, SCRIPT)
+        hook = self.repo / ".git" / "hooks" / "pre-commit"
+        text = hook.read_text(encoding="utf-8")
+
+        self.assertEqual("installed", first["action"])
+        self.assertEqual("updated", second["action"])
+        self.assertEqual(1, text.count(wiki_tool.MANAGED_HOOK_BEGIN))
+
+        custom_hooks = self.repo / ".githooks"
+        git(self.repo, "config", "core.hooksPath", ".githooks")
+        result = wiki_tool.install_hook(self.repo, SCRIPT)
+
+        self.assertEqual("installed", result["action"])
+        self.assertTrue((custom_hooks / "pre-commit").exists())
+
+    def test_install_hook_refuses_non_shell_hooks(self):
+        hook = self.repo / ".git" / "hooks" / "pre-commit"
+        hook.write_text("#!/usr/bin/env python3\nprint('custom')\n", encoding="utf-8")
+
+        with self.assertRaises(SystemExit):
+            wiki_tool.install_hook(self.repo, SCRIPT)
+
+
+if __name__ == "__main__":
+    unittest.main()
