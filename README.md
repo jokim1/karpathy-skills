@@ -603,7 +603,10 @@ This project is based on several public ideas and tools:
 | [Open Knowledge Format][okf-spec] | The repo wiki uses plain Markdown, YAML frontmatter, links, indexes, and logs. | Use OKF as a storage pattern, not as the whole product. |
 | [Google's OKF announcement][okf-announcement] | The idea that LLM-maintained wikis can be portable, local, and agent-friendly. | Apply the pattern specifically to coding-agent repo workflows. |
 | [Graphify][graphify] | Folder-to-graph and codebase Q&A are useful for orientation. | Focus on task briefs, source citations, and diff-aware maintenance. |
+| [Graphify token-savings claim][graphify-token-claim] | Public claim that compiling raw files into a wiki/graph can cut repeated query context dramatically. | Treat as directional evidence, not as a benchmark for this repo. |
 | [ByteRover CLI][byterover] | Inspectable, file-based agent memory is better than a black box. | Keep the first version repo-local and lightweight. |
+| [ByteRover benchmark][byterover-benchmark] | Published memory-retrieval accuracy and latency numbers for an agent memory system. | Use as adjacent evidence for structured memory, not as a direct `/karpathy:wiki` result. |
+| [Karpathy LLM Wiki gist][karpathy-llm-wiki] | The maintained-wiki pattern: raw sources are compiled once into a Markdown knowledge base. | Adapt the pattern to repo workflows, task briefs, and diff-aware updates. |
 | [Claude Code plugin docs][claude-plugin-docs] | Marketplace packaging, plugin updates, skills, commands, and hooks. | Package the workflows as installable Claude Code skills. |
 | [Codex plugin docs][codex-plugin-docs] | Native Codex plugin manifests and marketplace entries. | Ship the same plugin to Codex without requiring users to copy raw skill files. |
 
@@ -656,6 +659,49 @@ Honest caveats: this is one run per cell. It is directional evidence, not a
 statistically robust benchmark. The skill also roughly doubles wall-clock time
 and adds about 30% more tokens, because it does more work. `/karpathy:diff` is
 newer and not yet benchmarked; it follows the same report-then-approve design.
+
+### Diff And Wiki Evidence
+
+`/karpathy:diff` has not been formally benchmarked yet. Anecdotally, it has
+been one of the highest-impact parts of this workflow for vibe coding because
+it reviews the failure mode that normal review often misses:
+
+```text
+Does every changed line trace back to the task?
+```
+
+That is a narrower question than "is this code good?" and it is useful because
+AI agents often make plausible changes that were never asked for: collateral
+file edits, drive-by refactors, quiet deletions, broad reformatting, or missing
+verification. The advantage is not that `/karpathy:diff` is smarter than a
+strong model. The advantage is that it forces the model to review the diff in a
+consistent, task-traceable shape before the user accepts it.
+
+The right benchmark for `/karpathy:diff` would be small and concrete:
+
+| What To Measure | Why It Matters |
+| --- | --- |
+| Traceability recall | Does it catch hunks that do not belong to the task? |
+| Traceability precision | Does it avoid flagging clean hunks that do belong? |
+| Collateral-file detection | Does it catch files the task did not require? |
+| Deletion review | Does it challenge removed comments or code that do not trace? |
+| Verification coverage | Does it notice missing tests or checks? |
+| Time and token cost | Is the extra review cost worth the caught issues? |
+
+For `/karpathy:wiki`, there are adjacent public numbers from wiki and memory
+systems, but not yet project-specific results for this repo:
+
+| Evidence | Reported Result | What It Suggests | Caveat |
+| --- | --- | --- | --- |
+| [Graphify token-savings claim][graphify-token-claim] | 71.5x fewer tokens per query versus reading raw files cold. | Compiling raw material into a structured wiki or graph can reduce repeated context loading. | Public community/maintainer claim; not independently reproduced here. |
+| [ByteRover benchmark][byterover-benchmark] | 92.8% on LongMemEval-S and 1.6s p50 retrieval latency. | Structured agent memory can be measured for retrieval quality and speed. | Different product and benchmark; not a direct test of `/karpathy:wiki`. |
+| [Google OKF announcement][okf-announcement] | No performance number. OKF formalizes Markdown plus YAML frontmatter as an interoperable LLM-wiki format. | The storage pattern is becoming standardized. | OKF is a format, not a complete coding-agent workflow. |
+
+The honest read: external numbers support the product bet, but they do not
+prove this implementation. This repo should eventually publish two more
+benchmarks: a `/karpathy:diff` traceability suite and a `/karpathy:wiki`
+orientation suite that measures whether agents find the right files, preserve
+invariants, and spend fewer tokens on repeated repo questions.
 
 ---
 
@@ -732,7 +778,10 @@ any related project mentioned above.
 [okf-spec]: https://github.com/GoogleCloudPlatform/knowledge-catalog/blob/main/okf/SPEC.md
 [okf-announcement]: https://cloud.google.com/blog/products/data-analytics/how-the-open-knowledge-format-can-improve-data-sharing
 [graphify]: https://github.com/safishamsi/graphify
+[graphify-token-claim]: https://www.reddit.com/r/ClaudeCode/comments/1sdaakg/715x_token_reduction_by_compiling_your_raw_folder/
 [byterover]: https://github.com/campfirein/byterover-cli
+[byterover-benchmark]: https://www.byterover.dev/blog/benchmark_ai_agent_memory_real_production_byterover_top_market_accuracy_longmemeval
+[karpathy-llm-wiki]: https://gist.github.com/karpathy/442a6bf555914893e9891c11519de94f
 [claude-plugin-docs]: https://code.claude.com/docs/en/plugin-marketplaces
 [codex-plugin-docs]: https://developers.openai.com/codex/plugins/build
 
