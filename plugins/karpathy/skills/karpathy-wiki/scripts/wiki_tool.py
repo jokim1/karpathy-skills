@@ -1777,6 +1777,7 @@ def affected_report(repo: Path, scope: str = "all") -> dict[str, Any]:
         and not path.startswith("knowledge/raw/")
         and not path.startswith("knowledge/wiki/")
         and not path.startswith("knowledge/outputs/")
+        and path != "knowledge/rules.md"
         and path not in covered_paths
         and not any(resource_matches(repo, path, resource, source_kinds.get(resource)) for resource in source_map)
     ]

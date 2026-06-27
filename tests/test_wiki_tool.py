@@ -475,11 +475,13 @@ class WikiToolTests(unittest.TestCase):
         wiki_tool.init_wiki(self.repo)
         body_file = self.write_raw_body("ticket-body.txt", "External ticket.\n")
         raw = wiki_tool.raw_add(self.repo, "tickets", "External Ticket", body_file)
+        (self.repo / "knowledge" / "rules.md").write_text("# Rules\n", encoding="utf-8")
 
         result = wiki_tool.affected_report(self.repo)
 
         self.assertEqual({}, result["affected_concepts"])
         self.assertNotIn(raw["path"], result["missing_concept_coverage"])
+        self.assertNotIn("knowledge/rules.md", result["missing_concept_coverage"])
 
     def test_doctor_reports_missing_wiki(self):
         result = wiki_tool.doctor(self.repo)

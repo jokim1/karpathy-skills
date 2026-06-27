@@ -1,0 +1,77 @@
+{
+  "concept_count": 4,
+  "concepts": [
+    {
+      "description": "Deterministic repo/wiki operations for the karpathy-wiki skill.",
+      "path": "knowledge/wiki/components/wiki-helper.md",
+      "resources": [
+        "plugins/karpathy/skills/karpathy-wiki/scripts/wiki_tool.py"
+      ],
+      "title": "Karpathy Wiki Helper",
+      "type": "Component"
+    },
+    {
+      "description": "Unit tests cover helper behavior and skill/command contracts.",
+      "path": "knowledge/wiki/tests/wiki-verification-surface.md",
+      "resources": [
+        "tests/test_wiki_skill_contract.py",
+        "tests/test_wiki_tool.py"
+      ],
+      "title": "Wiki Verification Surface",
+      "type": "Test Surface"
+    },
+    {
+      "description": "Contributor workflow for installing, validating, and publishing the karpathy plugin.",
+      "path": "knowledge/wiki/workflows/local-development.md",
+      "resources": [
+        "README.md"
+      ],
+      "title": "Local Development",
+      "type": "Workflow"
+    },
+    {
+      "description": "The user-facing wiki workflow stays on /karpathy:wiki while helpers remain internal.",
+      "path": "knowledge/wiki/workflows/wiki-public-surface.md",
+      "resources": [
+        "README.md",
+        "plugins/karpathy/commands/wiki.md",
+        "plugins/karpathy/skills/karpathy-wiki/SKILL.md"
+      ],
+      "title": "Wiki Public Surface",
+      "type": "Workflow"
+    }
+  ],
+  "generated_at": "2026-06-27T05:50:58Z",
+  "source_commit": "ac86a13",
+  "source_kinds": {
+    "README.md": "file",
+    "plugins/karpathy/commands/wiki.md": "file",
+    "plugins/karpathy/skills/karpathy-wiki/SKILL.md": "file",
+    "plugins/karpathy/skills/karpathy-wiki/scripts/wiki_tool.py": "file",
+    "tests/test_wiki_skill_contract.py": "file",
+    "tests/test_wiki_tool.py": "file"
+  },
+  "source_map": {
+    "README.md": [
+      "knowledge/wiki/workflows/local-development.md",
+      "knowledge/wiki/workflows/wiki-public-surface.md"
+    ],
+    "plugins/karpathy/commands/wiki.md": [
+      "knowledge/wiki/workflows/wiki-public-surface.md"
+    ],
+    "plugins/karpathy/skills/karpathy-wiki/SKILL.md": [
+      "knowledge/wiki/workflows/wiki-public-surface.md"
+    ],
+    "plugins/karpathy/skills/karpathy-wiki/scripts/wiki_tool.py": [
+      "knowledge/wiki/components/wiki-helper.md"
+    ],
+    "tests/test_wiki_skill_contract.py": [
+      "knowledge/wiki/tests/wiki-verification-surface.md"
+    ],
+    "tests/test_wiki_tool.py": [
+      "knowledge/wiki/tests/wiki-verification-surface.md"
+    ]
+  },
+  "version": 1,
+  "wiki_root": "knowledge/wiki"
+}
