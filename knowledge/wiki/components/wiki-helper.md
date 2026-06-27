@@ -6,7 +6,7 @@ resource: ../../../plugins/karpathy/skills/karpathy-wiki/scripts/wiki_tool.py
 raw_sources: [external-docs-correction-for-llm-wiki-adoption-dogfood-note-2026-06-27]
 tags: [wiki, helper, raw-ingest]
 timestamp: 2026-06-27T05:50:00Z
-source_commit: ac86a13
+source_commit: 58012c4
 confidence: high
 verified_by: ["python3 -m unittest tests/test_wiki_tool.py tests/test_wiki_skill_contract.py"]
 ---
@@ -39,7 +39,15 @@ which supersedes the initial validation note. [2]
 
 `compile-plan` accepts exactly one raw source ID or one Git-tracked source unit.
 Directory source units are helper-capped and named explicitly, so a source set
-cannot silently mean the whole repo. [1]
+cannot silently mean the whole repo. Directory plans report both
+`source_total_count` and `source_truncated`, making capped source sets visible
+to the agent before semantic wiki writing starts. [1]
+
+# Wiki Scaffold
+
+`init_wiki` creates indexes for each concept area linked from the root index,
+so the generated scaffold has resolvable area navigation before any semantic
+concept pages exist. [1]
 
 # Citations
 

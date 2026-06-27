@@ -29,6 +29,15 @@ CONCEPT_DIRS = {
     "Task Recipe": "recipes",
     "Failure Mode": "failure-modes",
 }
+CONCEPT_AREA_TITLES = {
+    "Component": "Components",
+    "Workflow": "Workflows",
+    "Invariant": "Invariants",
+    "Decision": "Decisions",
+    "Test Surface": "Test Surfaces",
+    "Task Recipe": "Task Recipes",
+    "Failure Mode": "Failure Modes",
+}
 REQUIRED_CONCEPT_FIELDS = ("type", "title", "description", "timestamp")
 LOCAL_LINK_RE = re.compile(r"\[[^\]]+\]\(([^)]+)\)")
 PACKAGE_FILE_NAMES = [
@@ -465,7 +474,7 @@ def git_tracked(repo: Path, path: str) -> bool:
     return bool(run_git(repo, ["ls-files", "--error-unmatch", normalize_repo_path(path)]))
 
 
-def tracked_source_files_under(repo: Path, resource: str, limit: int = COMPILE_SOURCE_SET_LIMIT) -> list[str]:
+def tracked_source_file_candidates_under(repo: Path, resource: str) -> list[str]:
     normalized = normalize_repo_path(resource)
     output = run_git(repo, ["ls-files", "--", normalized])
     paths = [
@@ -475,7 +484,11 @@ def tracked_source_files_under(repo: Path, resource: str, limit: int = COMPILE_S
         and not scan_path_is_ignored(normalize_repo_path(path))
         and Path(normalize_repo_path(path)).suffix in SOURCE_FILE_SUFFIXES
     ]
-    return sorted(dict.fromkeys(paths))[:limit]
+    return sorted(dict.fromkeys(paths))
+
+
+def tracked_source_files_under(repo: Path, resource: str, limit: int = COMPILE_SOURCE_SET_LIMIT) -> list[str]:
+    return tracked_source_file_candidates_under(repo, resource)[:limit]
 
 
 def raw_source_ids_for_concept(frontmatter: dict[str, Any], body: str) -> list[str]:
@@ -540,6 +553,7 @@ def compile_plan(repo: Path, source: str = "", raw_source_id: str = "", limit: i
     if raw_source_id:
         raw_path, _frontmatter, _body = read_raw_record(repo, raw_source_id)
         source_paths = [rel(repo, raw_path)]
+        source_total_count = len(source_paths)
         unit_type = "raw-source"
         source_id = raw_source_id
     else:
@@ -551,9 +565,12 @@ def compile_plan(repo: Path, source: str = "", raw_source_id: str = "", limit: i
             if not git_tracked(repo, normalized):
                 raise SystemExit(f"Compile source must be a Git-tracked file: {normalized}")
             source_paths = [normalized]
+            source_total_count = len(source_paths)
             unit_type = "git-file"
         else:
-            source_paths = tracked_source_files_under(repo, normalized, limit=limit)
+            source_candidates = tracked_source_file_candidates_under(repo, normalized)
+            source_total_count = len(source_candidates)
+            source_paths = source_candidates[:limit]
             if not source_paths:
                 raise SystemExit(f"Compile source set has no Git-tracked source files: {normalized}")
             unit_type = "repo-source-set"
@@ -565,7 +582,9 @@ def compile_plan(repo: Path, source: str = "", raw_source_id: str = "", limit: i
         "source_id": source_id,
         "source_paths": source_paths,
         "source_count": len(source_paths),
+        "source_total_count": source_total_count,
         "source_limit": limit,
+        "source_truncated": source_total_count > len(source_paths),
         "affected_concept_candidates": affected,
         "questions": [
             "Which durable concept should this bounded source unit create or update?",
@@ -1567,6 +1586,20 @@ source_commit: {commit}
 - Initialized repo wiki scaffold at `knowledge/wiki/`.
 """,
     }
+    for concept_type, dirname in CONCEPT_DIRS.items():
+        title = CONCEPT_AREA_TITLES[concept_type]
+        files[wiki_dir(repo) / dirname / "index.md"] = f"""---
+type: Index
+title: {title}
+description: {concept_type} concept pages.
+timestamp: {timestamp}
+source_commit: {commit}
+---
+
+# {title}
+
+- Add `{concept_type}` concept pages here when source evidence supports them.
+"""
 
     for path, content in files.items():
         if write_once(path, content, force=force):

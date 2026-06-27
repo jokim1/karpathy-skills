@@ -88,6 +88,8 @@ class WikiToolTests(unittest.TestCase):
         first = wiki_tool.init_wiki(self.repo)
         self.assertTrue((self.repo / "knowledge" / "wiki" / "index.md").exists())
         self.assertTrue((self.repo / "knowledge" / "wiki" / "components").is_dir())
+        for dirname in wiki_tool.CONCEPT_DIRS.values():
+            self.assertTrue((self.repo / "knowledge" / "wiki" / dirname / "index.md").exists())
         self.assertIn("knowledge/wiki/.karpathy-wiki.json", first["created"])
 
         index = self.repo / "knowledge" / "wiki" / "index.md"
@@ -336,6 +338,8 @@ class WikiToolTests(unittest.TestCase):
         self.assertEqual("git-file", plan["unit_type"])
         self.assertEqual(["src/auth.ts"], plan["source_paths"])
         self.assertEqual(1, plan["source_count"])
+        self.assertEqual(1, plan["source_total_count"])
+        self.assertFalse(plan["source_truncated"])
         self.assertEqual("", plan["source_id"])
         self.assertEqual(
             [{"path": "knowledge/wiki/components/auth.md", "type": "Component", "title": "Auth Concept", "reason": "already cites src/auth.ts"}],
@@ -353,7 +357,9 @@ class WikiToolTests(unittest.TestCase):
         self.assertEqual("repo-source-set", plan["unit_type"])
         self.assertEqual(["src/auth/file0.ts", "src/auth/file1.ts"], plan["source_paths"])
         self.assertEqual(2, plan["source_count"])
+        self.assertEqual(4, plan["source_total_count"])
         self.assertEqual(2, plan["source_limit"])
+        self.assertTrue(plan["source_truncated"])
 
     def test_compile_plan_for_raw_source_returns_single_raw_unit(self):
         body_file = self.write_raw_body("external-note.txt", "External note.\n")
@@ -365,6 +371,8 @@ class WikiToolTests(unittest.TestCase):
         self.assertEqual(raw["source_id"], plan["source_id"])
         self.assertEqual([raw["path"]], plan["source_paths"])
         self.assertEqual(1, plan["source_count"])
+        self.assertEqual(1, plan["source_total_count"])
+        self.assertFalse(plan["source_truncated"])
 
     def test_compile_plan_rejects_untracked_repo_file(self):
         self.write_source("src/untracked.ts")

@@ -176,6 +176,9 @@ the semantic wiki edit must answer. The helper does not generate claims; the
 agent must read the bounded source unit and write cited wiki prose. If a concept
 needs more than one source unit, do multiple compile passes and cite each unit
 explicitly.
+If `source_truncated` is true, treat `source_paths` as a partial bounded set:
+compile that set first, then run additional compile passes for the remaining
+source files instead of implying the directory was fully covered.
 
 ## First Step
 

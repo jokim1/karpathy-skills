@@ -5,7 +5,7 @@ description: The user-facing wiki workflow stays on /karpathy:wiki while helpers
 resources: [../../../plugins/karpathy/skills/karpathy-wiki/SKILL.md, ../../../plugins/karpathy/commands/wiki.md, ../../../README.md]
 tags: [wiki, ux, command]
 timestamp: 2026-06-27T05:50:00Z
-source_commit: ac86a13
+source_commit: 58012c4
 confidence: high
 verified_by: ["python3 -m unittest tests/test_wiki_skill_contract.py"]
 ---
@@ -29,6 +29,10 @@ user run `wiki_tool.py` during normal operation. [1]
 When adding helper operations, update skill instructions and contract tests so
 agents can use the helper internally without changing the public command surface.
 [2] [3]
+
+Compile-plan guidance treats `source_truncated: true` as an internal signal that
+the current `source_paths` list is partial and more bounded passes are needed,
+without asking the user to run extra commands. [2]
 
 # Citations
 

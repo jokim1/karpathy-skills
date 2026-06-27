@@ -59,6 +59,7 @@ class WikiSkillContractTests(unittest.TestCase):
         self.assertIn("## Compile Scope", text)
         self.assertIn("Compile one bounded source unit at a time", text)
         self.assertIn("compile-plan --repo . --source", text)
+        self.assertIn("source_truncated", text)
         self.assertIn("unreachable concept pages", text)
         self.assertIn("Do not run deep graph/index lint from hooks", text)
 
