@@ -32,6 +32,11 @@ source code.
 - Treat source code, tests, and explicit user instructions as authoritative.
 - Use the wiki to narrow where to look; read cited source files before editing
   code or making implementation claims.
+- Treat raw ingest as external-source capture only. Do not copy Git-tracked
+  source files into `knowledge/raw/`; repo code stays authoritative through
+  path and commit citations.
+- Compile one bounded source unit at a time before semantic wiki writing: one
+  raw source record, one Git-tracked file, or one helper-capped repo source set.
 - For normal wiki writes, state the exact files you will create or update and
   proceed when the user has asked for setup/update or has accepted your proposed
   wiki action. Ask a clarifying question only when the write scope is ambiguous
@@ -134,6 +139,44 @@ frontmatter and citations. It contains `version`, `generated_at`,
 Do not edit the manifest manually; regenerate it with `refresh-manifest`.
 `doctor` reports when the saved manifest is stale, but it does not rewrite it.
 
+## Raw Source Capture
+
+Raw ingest is only for non-Git sources: tickets, screenshots, external docs,
+meeting notes, transcripts, pasted user context, and other material that lacks
+repo history. Use raw records to preserve external evidence, then cite raw IDs
+from wiki concepts as `raw:<source_id>` or in `raw_source` / `raw_sources`
+frontmatter.
+
+Run raw helper commands internally when needed:
+
+```bash
+python3 <skill-dir>/scripts/wiki_tool.py raw-add --repo . --kind <kind> --title <title> --body-file <path> --json
+python3 <skill-dir>/scripts/wiki_tool.py raw-correct --repo . --source-id <id> --body-file <path> --json
+python3 <skill-dir>/scripts/wiki_tool.py raw-redact --repo . --source-id <id> --reason "<reason>" --json
+python3 <skill-dir>/scripts/wiki_tool.py raw-show --repo . --source-id <id> --json
+```
+
+Do not expose these as public slash commands. Summarize helper results to the
+user. Corrections create new records that supersede older raw IDs. Redaction is
+the safety exception: it may replace stored body content when secrets or
+personal data slipped into a raw record.
+
+## Compile Scope
+
+Before turning external or repo source material into concept text, run the
+read-only compile planner internally:
+
+```bash
+python3 <skill-dir>/scripts/wiki_tool.py compile-plan --repo . --source <git-tracked-file-or-directory> --json
+python3 <skill-dir>/scripts/wiki_tool.py compile-plan --repo . --source-id <raw-source-id> --json
+```
+
+Use the output to name the exact source paths, candidate concepts, and questions
+the semantic wiki edit must answer. The helper does not generate claims; the
+agent must read the bounded source unit and write cited wiki prose. If a concept
+needs more than one source unit, do multiple compile passes and cite each unit
+explicitly.
+
 ## First Step
 
 Internally run:
@@ -216,7 +259,8 @@ python3 <skill-dir>/scripts/wiki_tool.py install-hook --repo . --strict
 
 Git hooks must stay non-semantic: they can remind or block in strict mode, but
 they must not run an LLM update, edit wiki pages, stage files, or change agent
-instruction files.
+instruction files. Do not run deep graph/index lint from hooks; keep that in
+doctor mode.
 
 Agent-instruction setup is proposal-only. If `CLAUDE.md`, `AGENTS.md`, or rule
 files exist, offer this snippet, but do not edit unless the user approves:
@@ -364,8 +408,9 @@ Report:
 
 - Critical issues: broken local links, missing required index/log, concept
   source references that no longer exist.
-- Warnings: missing frontmatter fields, uncited concepts, stale changed-file
-  mappings.
+- Warnings: missing frontmatter fields, missing `source_commit`, uncited
+  concepts, unreachable concept pages, unresolved raw source IDs, stale
+  manifests, and stale changed-file mappings.
 - Clean checks.
 
 Favor minimal repair: fix a link, add a missing frontmatter field, refresh the

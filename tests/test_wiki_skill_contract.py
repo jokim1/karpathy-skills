@@ -15,6 +15,13 @@ class WikiSkillContractTests(unittest.TestCase):
         self.assertIn("Do not tell the user to run", text)
         self.assertIn("wiki_tool.py", text)
 
+    def test_command_does_not_expand_public_raw_helper_surface(self):
+        text = COMMAND.read_text(encoding="utf-8")
+
+        self.assertIn("/karpathy:wiki", text)
+        for helper in ("raw-add", "raw-correct", "raw-redact", "raw-show", "compile-plan"):
+            self.assertNotIn(helper, text)
+
     def test_skill_declares_user_facing_ux_contract(self):
         text = SKILL.read_text(encoding="utf-8")
 
@@ -37,6 +44,23 @@ class WikiSkillContractTests(unittest.TestCase):
         self.assertIn("knowledge/outputs/wiki-improvements.md", text)
         self.assertIn("not telemetry", text)
         self.assertIn("background network upload", text)
+
+    def test_skill_defines_raw_capture_as_external_not_repo_copying(self):
+        text = SKILL.read_text(encoding="utf-8")
+
+        self.assertIn("## Raw Source Capture", text)
+        self.assertIn("Raw ingest is only for non-Git sources", text)
+        self.assertIn("Do not copy Git-tracked", text)
+        self.assertIn("Do not expose these as public slash commands", text)
+
+    def test_skill_requires_bounded_compile_scope_and_doctor_graph_lint(self):
+        text = SKILL.read_text(encoding="utf-8")
+
+        self.assertIn("## Compile Scope", text)
+        self.assertIn("Compile one bounded source unit at a time", text)
+        self.assertIn("compile-plan --repo . --source", text)
+        self.assertIn("unreachable concept pages", text)
+        self.assertIn("Do not run deep graph/index lint from hooks", text)
 
 
 if __name__ == "__main__":

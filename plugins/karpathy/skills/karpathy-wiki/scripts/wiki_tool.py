@@ -4,6 +4,7 @@
 from __future__ import annotations
 
 import argparse
+import hashlib
 import json
 import os
 import re
@@ -95,6 +96,31 @@ DOMAIN_SIGNAL_KEYWORDS = (
     "service",
     "store",
 )
+RAW_MAX_BYTES = 256 * 1024
+RAW_FRONTMATTER_FIELDS = (
+    "type",
+    "source_id",
+    "kind",
+    "title",
+    "timestamp",
+    "sha256",
+    "source_url",
+    "source_commit",
+    "supersedes",
+    "redacted",
+)
+RAW_SECRET_PATTERNS = (
+    re.compile(r"-----BEGIN [A-Z ]*PRIVATE KEY-----"),
+    re.compile(r"\bAKIA[0-9A-Z]{16}\b"),
+    re.compile(r"\bgh[pousr]_[A-Za-z0-9_]{20,}\b"),
+    re.compile(r"\bgithub_pat_[A-Za-z0-9_]{20,}\b"),
+    re.compile(r"\bsk_(?:live|test)_[A-Za-z0-9]{16,}\b"),
+    re.compile(r"\b\d{3}-\d{2}-\d{4}\b"),
+    re.compile(r"\b(?:api[_-]?key|secret|token|password)\s*[:=]\s*['\"]?[^'\"\s]{8,}", re.IGNORECASE),
+)
+RAW_REF_RE = re.compile(r"\braw:([a-z0-9][a-z0-9-]*)\b")
+COMPILE_SOURCE_SET_LIMIT = 8
+DRAFT_TYPES = {"draft", "Draft"}
 
 
 @dataclass
@@ -240,6 +266,321 @@ Local, append-only dogfood notes for improving the karpathy-wiki skill.
     }
 
 
+def raw_root(repo: Path) -> Path:
+    return repo / "knowledge" / "raw"
+
+
+def raw_kind_slug(kind: str) -> str:
+    if not kind.strip():
+        raise SystemExit("Raw source kind is required.")
+    return slugify(kind)
+
+
+def sha256_text(text: str) -> str:
+    return hashlib.sha256(text.encode("utf-8")).hexdigest()
+
+
+def raw_body_from_file(path: Path) -> str:
+    if not path.is_file():
+        raise SystemExit(f"Raw body file does not exist: {path}")
+    data = path.read_bytes()
+    if len(data) > RAW_MAX_BYTES:
+        raise SystemExit(f"Raw body file is too large; limit is {RAW_MAX_BYTES} bytes.")
+    if b"\x00" in data:
+        raise SystemExit("Raw body file appears to be binary; store metadata instead of raw content.")
+    try:
+        text = data.decode("utf-8")
+    except UnicodeDecodeError as error:
+        raise SystemExit("Raw body file must be UTF-8 text; store metadata instead of raw content.") from error
+    text = text.replace("\r\n", "\n").replace("\r", "\n")
+    if not text.strip():
+        raise SystemExit("Raw body file is empty.")
+    return text.rstrip("\n") + "\n"
+
+
+def ensure_raw_body_safe(text: str) -> None:
+    for pattern in RAW_SECRET_PATTERNS:
+        if pattern.search(text):
+            raise SystemExit(
+                "Raw source appears to contain a secret or sensitive personal data; "
+                "summarize sensitive material instead of storing it."
+            )
+
+
+def raw_source_id_base(kind: str, title: str, timestamp: str) -> str:
+    clean_title = " ".join(title.strip().split())
+    if not clean_title:
+        raise SystemExit("Raw source title is required.")
+    return slugify(f"{kind}-{clean_title}-{timestamp[:10]}")
+
+
+def raw_record_paths(repo: Path, source_id: str) -> list[Path]:
+    if not raw_root(repo).exists():
+        return []
+    return sorted(raw_root(repo).glob(f"*/{source_id}.md"))
+
+
+def raw_record_path(repo: Path, source_id: str) -> Path:
+    matches = raw_record_paths(repo, source_id)
+    if not matches:
+        raise SystemExit(f"Raw source not found: {source_id}")
+    if len(matches) > 1:
+        raise SystemExit(f"Raw source id is ambiguous: {source_id}")
+    return matches[0]
+
+
+def unique_raw_source_id(repo: Path, kind: str, title: str, timestamp: str) -> str:
+    base = raw_source_id_base(kind, title, timestamp)
+    source_id = base
+    suffix = 2
+    while raw_record_paths(repo, source_id):
+        source_id = f"{base}-{suffix}"
+        suffix += 1
+    return source_id
+
+
+def yaml_scalar(value: Any) -> str:
+    if isinstance(value, bool):
+        return "true" if value else "false"
+    text = str(value)
+    if not text:
+        return '""'
+    if text != text.strip() or any(char in text for char in "\n:#[]{}"):
+        return json.dumps(text)
+    return text
+
+
+def raw_record_content(frontmatter: dict[str, Any], body: str) -> str:
+    lines = ["---"]
+    for field in RAW_FRONTMATTER_FIELDS:
+        value = frontmatter.get(field)
+        if value is None or value == "":
+            continue
+        lines.append(f"{field}: {yaml_scalar(value)}")
+    lines.extend(["---", body.rstrip("\n"), ""])
+    return "\n".join(lines)
+
+
+def raw_record_result(repo: Path, path: Path, frontmatter: dict[str, Any], body: str) -> dict[str, Any]:
+    redacted = str(frontmatter.get("redacted", "")).lower() == "true"
+    return {
+        "path": rel(repo, path),
+        "source_id": str(frontmatter.get("source_id", path.stem)),
+        "sha256": str(frontmatter.get("sha256", sha256_text(body))),
+        "created": str(frontmatter.get("timestamp", "")),
+        "supersedes": str(frontmatter.get("supersedes", "")),
+        "redacted": redacted,
+        "kind": str(frontmatter.get("kind", path.parent.name)),
+        "title": str(frontmatter.get("title", path.stem)),
+        "body": body,
+    }
+
+
+def read_raw_record(repo: Path, source_id: str) -> tuple[Path, dict[str, Any], str]:
+    path = raw_record_path(repo, source_id)
+    frontmatter, body = parse_frontmatter(read_text(path))
+    if not frontmatter:
+        raise SystemExit(f"Raw source has no frontmatter: {rel(repo, path)}")
+    return path, frontmatter, body
+
+
+def raw_add(repo: Path, kind: str, title: str, body_file: Path, source_url: str = "") -> dict[str, Any]:
+    clean_kind = raw_kind_slug(kind)
+    clean_title = " ".join(title.strip().split())
+    body = raw_body_from_file(body_file)
+    ensure_raw_body_safe(body)
+    timestamp = now_iso()
+    source_id = unique_raw_source_id(repo, clean_kind, clean_title, timestamp)
+    path = raw_root(repo) / clean_kind / f"{source_id}.md"
+    commit = run_git(repo, ["rev-parse", "--short", "HEAD"])
+    frontmatter: dict[str, Any] = {
+        "type": "Raw Source",
+        "source_id": source_id,
+        "kind": clean_kind,
+        "title": clean_title,
+        "timestamp": timestamp,
+        "sha256": sha256_text(body),
+    }
+    if source_url.strip():
+        frontmatter["source_url"] = source_url.strip()
+    if commit:
+        frontmatter["source_commit"] = commit
+    path.parent.mkdir(parents=True, exist_ok=True)
+    path.write_text(raw_record_content(frontmatter, body), encoding="utf-8")
+    return raw_record_result(repo, path, frontmatter, body)
+
+
+def raw_correct(repo: Path, source_id: str, body_file: Path) -> dict[str, Any]:
+    _old_path, old_frontmatter, _old_body = read_raw_record(repo, source_id)
+    clean_kind = raw_kind_slug(str(old_frontmatter.get("kind", "")))
+    old_title = str(old_frontmatter.get("title", source_id)).strip() or source_id
+    title = f"Correction for {old_title}"
+    body = raw_body_from_file(body_file)
+    ensure_raw_body_safe(body)
+    timestamp = now_iso()
+    new_source_id = unique_raw_source_id(repo, clean_kind, title, timestamp)
+    path = raw_root(repo) / clean_kind / f"{new_source_id}.md"
+    commit = run_git(repo, ["rev-parse", "--short", "HEAD"])
+    frontmatter: dict[str, Any] = {
+        "type": "Raw Source",
+        "source_id": new_source_id,
+        "kind": clean_kind,
+        "title": title,
+        "timestamp": timestamp,
+        "sha256": sha256_text(body),
+        "supersedes": source_id,
+    }
+    if old_frontmatter.get("source_url"):
+        frontmatter["source_url"] = old_frontmatter["source_url"]
+    if commit:
+        frontmatter["source_commit"] = commit
+    path.parent.mkdir(parents=True, exist_ok=True)
+    path.write_text(raw_record_content(frontmatter, body), encoding="utf-8")
+    return raw_record_result(repo, path, frontmatter, body)
+
+
+def raw_redact(repo: Path, source_id: str, reason: str) -> dict[str, Any]:
+    clean_reason = " ".join(reason.strip().split())
+    if not clean_reason:
+        raise SystemExit("Redaction reason is required.")
+    ensure_raw_body_safe(clean_reason)
+    path, frontmatter, body = read_raw_record(repo, source_id)
+    timestamp = now_iso()
+    if str(frontmatter.get("redacted", "")).lower() == "true":
+        redacted_body = body.rstrip("\n") + f"\n\nRedaction reason ({timestamp}): {clean_reason}\n"
+    else:
+        redacted_body = f"[REDACTED]\n\nRedaction reason ({timestamp}): {clean_reason}\n"
+    frontmatter["redacted"] = True
+    frontmatter["sha256"] = sha256_text(redacted_body)
+    path.write_text(raw_record_content(frontmatter, redacted_body), encoding="utf-8")
+    return raw_record_result(repo, path, frontmatter, redacted_body)
+
+
+def raw_show(repo: Path, source_id: str) -> dict[str, Any]:
+    path, frontmatter, body = read_raw_record(repo, source_id)
+    return raw_record_result(repo, path, frontmatter, body)
+
+
+def git_tracked(repo: Path, path: str) -> bool:
+    return bool(run_git(repo, ["ls-files", "--error-unmatch", normalize_repo_path(path)]))
+
+
+def tracked_source_files_under(repo: Path, resource: str, limit: int = COMPILE_SOURCE_SET_LIMIT) -> list[str]:
+    normalized = normalize_repo_path(resource)
+    output = run_git(repo, ["ls-files", "--", normalized])
+    paths = [
+        normalize_repo_path(path)
+        for path in output.splitlines()
+        if normalize_repo_path(path)
+        and not scan_path_is_ignored(normalize_repo_path(path))
+        and Path(normalize_repo_path(path)).suffix in SOURCE_FILE_SUFFIXES
+    ]
+    return sorted(dict.fromkeys(paths))[:limit]
+
+
+def raw_source_ids_for_concept(frontmatter: dict[str, Any], body: str) -> list[str]:
+    ids: set[str] = set()
+    for key in ("raw_source", "raw_sources"):
+        value = frontmatter.get(key)
+        values = value if isinstance(value, list) else parse_inline_list(str(value or ""))
+        for item in values:
+            item = str(item).strip()
+            if item.startswith("raw:"):
+                item = item[4:]
+            if item:
+                ids.add(slugify(item))
+    for match in RAW_REF_RE.finditer(body):
+        ids.add(match.group(1))
+    return sorted(ids)
+
+
+def concept_candidate(path: Path, repo: Path, reason: str) -> dict[str, str]:
+    frontmatter, _body = parse_frontmatter(read_text(path))
+    return {
+        "path": rel(repo, path),
+        "type": str(frontmatter.get("type", "")),
+        "title": str(frontmatter.get("title", path.stem.replace("-", " ").title())),
+        "reason": reason,
+    }
+
+
+def compile_plan_existing_candidates(repo: Path, source_paths: list[str], raw_source_id: str = "") -> list[dict[str, str]]:
+    candidates: list[dict[str, str]] = []
+    seen: set[str] = set()
+    manifest = load_manifest(repo) if wiki_dir(repo).exists() else {}
+    source_map: dict[str, list[str]] = manifest.get("source_map", {})
+    source_kinds: dict[str, str] = manifest.get("source_kinds", {})
+    for source_path in source_paths:
+        for resource, concept_paths in source_map.items():
+            if not resource_matches(repo, source_path, resource, source_kinds.get(resource)):
+                continue
+            for concept_path in concept_paths:
+                concept = repo / concept_path
+                if concept.exists() and concept_path not in seen:
+                    seen.add(concept_path)
+                    candidates.append(concept_candidate(concept, repo, f"already cites {resource}"))
+    if raw_source_id:
+        for concept in concept_files(repo):
+            frontmatter, body = parse_frontmatter(read_text(concept))
+            concept_rel = rel(repo, concept)
+            if raw_source_id in raw_source_ids_for_concept(frontmatter, body) and concept_rel not in seen:
+                seen.add(concept_rel)
+                candidates.append(concept_candidate(concept, repo, f"already cites raw:{raw_source_id}"))
+    return candidates
+
+
+def compile_plan(repo: Path, source: str = "", raw_source_id: str = "", limit: int = COMPILE_SOURCE_SET_LIMIT) -> dict[str, Any]:
+    if bool(source) == bool(raw_source_id):
+        raise SystemExit("Provide exactly one source unit: --source or --source-id.")
+    if limit < 1:
+        raise SystemExit("Compile source-set limit must be at least 1.")
+    source_paths: list[str]
+    unit_type: str
+    source_id = ""
+    if raw_source_id:
+        raw_path, _frontmatter, _body = read_raw_record(repo, raw_source_id)
+        source_paths = [rel(repo, raw_path)]
+        unit_type = "raw-source"
+        source_id = raw_source_id
+    else:
+        normalized = normalize_repo_path(source)
+        target = repo / normalized
+        if not target.exists():
+            raise SystemExit(f"Compile source does not exist: {normalized}")
+        if target.is_file():
+            if not git_tracked(repo, normalized):
+                raise SystemExit(f"Compile source must be a Git-tracked file: {normalized}")
+            source_paths = [normalized]
+            unit_type = "git-file"
+        else:
+            source_paths = tracked_source_files_under(repo, normalized, limit=limit)
+            if not source_paths:
+                raise SystemExit(f"Compile source set has no Git-tracked source files: {normalized}")
+            unit_type = "repo-source-set"
+    affected = compile_plan_existing_candidates(repo, source_paths, raw_source_id=source_id)
+    return {
+        "repo": str(repo),
+        "wiki_root": "knowledge/wiki",
+        "unit_type": unit_type,
+        "source_id": source_id,
+        "source_paths": source_paths,
+        "source_count": len(source_paths),
+        "source_limit": limit,
+        "affected_concept_candidates": affected,
+        "questions": [
+            "Which durable concept should this bounded source unit create or update?",
+            "Which claims are directly supported by this source unit?",
+            "Which citations should the concept include before semantic writing starts?",
+            "What verification command or test surface is relevant to this source unit?",
+        ],
+        "guidance": [
+            "Compile exactly one bounded source unit at a time.",
+            "The helper only plans scope; the agent writes semantic wiki content after reading the sources.",
+            "Repo code stays authoritative through path and commit citations; raw records are for external sources.",
+        ],
+    }
+
+
 def parse_inline_list(value: str) -> list[str]:
     value = value.strip()
     if not value:
@@ -300,6 +641,58 @@ def markdown_links(text: str) -> list[str]:
 def resolve_link(base_file: Path, target: str) -> Path:
     target = target.split("#", 1)[0]
     return (base_file.parent / target).resolve()
+
+
+def wiki_markdown_files(repo: Path) -> list[Path]:
+    root = wiki_dir(repo)
+    if not root.exists():
+        return []
+    return sorted(path for path in root.rglob("*.md") if not any(part.startswith(".") for part in path.relative_to(root).parts))
+
+
+def resolve_wiki_page_link(repo: Path, base_file: Path, target: str) -> Path:
+    candidate = resolve_link(base_file, target)
+    root = wiki_dir(repo)
+    if not is_within(candidate, root):
+        return candidate
+    if candidate.is_dir():
+        index = candidate / "index.md"
+        return index.resolve() if index.exists() else candidate
+    if not candidate.exists() and (candidate / "index.md").exists():
+        return (candidate / "index.md").resolve()
+    return candidate
+
+
+def wiki_link_targets(repo: Path, path: Path) -> list[Path]:
+    targets: list[Path] = []
+    root = wiki_dir(repo)
+    for link in markdown_links(read_text(path)):
+        target = resolve_wiki_page_link(repo, path, link)
+        if is_within(target, root) and target.is_file():
+            targets.append(target.resolve())
+    return targets
+
+
+def reachable_wiki_pages(repo: Path) -> set[Path]:
+    index = wiki_dir(repo) / "index.md"
+    if not index.exists():
+        return set()
+    reachable: set[Path] = set()
+    pending = [index.resolve()]
+    while pending:
+        current = pending.pop()
+        if current in reachable:
+            continue
+        reachable.add(current)
+        for target in wiki_link_targets(repo, current):
+            if target not in reachable:
+                pending.append(target)
+    return reachable
+
+
+def wiki_page_is_draft(path: Path) -> bool:
+    frontmatter, _body = parse_frontmatter(read_text(path))
+    return str(frontmatter.get("status", "")).lower() == "draft" or str(frontmatter.get("type", "")) in DRAFT_TYPES
 
 
 def source_refs_for_concept(repo: Path, concept: Path, frontmatter: dict[str, Any], body: str) -> list[str]:
@@ -1246,25 +1639,36 @@ def doctor(repo: Path) -> dict[str, Any]:
         else:
             issues.append(Issue("critical", rel(repo, required), "required wiki file is missing"))
 
+    for page in wiki_markdown_files(repo):
+        page_rel = rel(repo, page)
+        for link in markdown_links(read_text(page)):
+            target = resolve_wiki_page_link(repo, page, link)
+            if is_within(target, repo) and not target.exists():
+                issues.append(Issue("critical", page_rel, f"broken local link: {link}"))
+
+    reachable = reachable_wiki_pages(repo)
     for path in concept_files(repo):
         text = read_text(path)
         frontmatter, body = parse_frontmatter(text)
         concept_rel = rel(repo, path)
+        if path.resolve() not in reachable and not wiki_page_is_draft(path):
+            issues.append(Issue("warning", concept_rel, "concept page is not reachable from knowledge/wiki/index.md"))
         if not frontmatter:
             issues.append(Issue("warning", concept_rel, "missing YAML frontmatter"))
         for field in REQUIRED_CONCEPT_FIELDS:
             if field not in frontmatter or not str(frontmatter.get(field, "")).strip():
                 issues.append(Issue("warning", concept_rel, f"missing frontmatter field: {field}"))
+        if "source_commit" not in frontmatter or not str(frontmatter.get("source_commit", "")).strip():
+            issues.append(Issue("warning", concept_rel, "missing frontmatter field: source_commit"))
         refs = source_refs_for_concept(repo, path, frontmatter, body)
         if not refs:
             issues.append(Issue("warning", concept_rel, "no source resource or citation detected"))
         for ref in refs:
             if not (repo / ref).exists():
                 issues.append(Issue("critical", concept_rel, f"source reference does not exist: {ref}"))
-        for link in markdown_links(body):
-            target = resolve_link(path, link)
-            if is_within(target, repo) and not target.exists():
-                issues.append(Issue("critical", concept_rel, f"broken local link: {link}"))
+        for source_id in raw_source_ids_for_concept(frontmatter, body):
+            if not raw_record_paths(repo, source_id):
+                issues.append(Issue("warning", concept_rel, f"raw source id does not resolve: {source_id}"))
 
     manifest = build_manifest(repo)
     if not manifest_path(repo).exists():
@@ -1370,6 +1774,7 @@ def affected_report(repo: Path, scope: str = "all") -> dict[str, Any]:
         path
         for path in scoped_paths
         if path
+        and not path.startswith("knowledge/raw/")
         and not path.startswith("knowledge/wiki/")
         and not path.startswith("knowledge/outputs/")
         and path not in covered_paths
@@ -1545,6 +1950,26 @@ def print_concept_plan(data: dict[str, Any]) -> None:
             print(f"- {item}")
 
 
+def print_compile_plan(data: dict[str, Any]) -> None:
+    print("# Karpathy Wiki Compile Plan")
+    print(f"Unit: {data['unit_type']}")
+    if data.get("source_id"):
+        print(f"Source id: {data['source_id']}")
+    print("\n## Source Paths")
+    for path in data.get("source_paths", []):
+        print(f"- {path}")
+    candidates = data.get("affected_concept_candidates", [])
+    print("\n## Affected Concept Candidates")
+    if candidates:
+        for candidate in candidates:
+            print(f"- {candidate['path']} - {candidate['reason']}")
+    else:
+        print("- None")
+    print("\n## Questions")
+    for question in data.get("questions", []):
+        print(f"- {question}")
+
+
 def print_affected(data: dict[str, Any]) -> None:
     print("# Karpathy Wiki Update Plan")
     print(f"Scope: {data['scope']}")
@@ -1588,6 +2013,12 @@ def main() -> int:
     concept_plan_parser = sub.add_parser("concept-plan")
     add_common(concept_plan_parser)
     concept_plan_parser.add_argument("--limit", type=int, default=8)
+    compile_plan_parser = sub.add_parser("compile-plan")
+    add_common(compile_plan_parser)
+    compile_plan_group = compile_plan_parser.add_mutually_exclusive_group(required=True)
+    compile_plan_group.add_argument("--source", default="")
+    compile_plan_group.add_argument("--source-id", default="")
+    compile_plan_parser.add_argument("--limit", type=int, default=COMPILE_SOURCE_SET_LIMIT)
     init_parser = sub.add_parser("init")
     add_common(init_parser)
     init_parser.add_argument("--force", action="store_true")
@@ -1611,6 +2042,23 @@ def main() -> int:
     update_plan_parser.add_argument("--scope", choices=["staged", "unstaged", "untracked", "head", "all"], default="all")
     refresh_parser = sub.add_parser("refresh-manifest")
     add_common(refresh_parser)
+    raw_add_parser = sub.add_parser("raw-add")
+    add_common(raw_add_parser)
+    raw_add_parser.add_argument("--kind", required=True)
+    raw_add_parser.add_argument("--title", required=True)
+    raw_add_parser.add_argument("--body-file", required=True)
+    raw_add_parser.add_argument("--source-url", default="")
+    raw_correct_parser = sub.add_parser("raw-correct")
+    add_common(raw_correct_parser)
+    raw_correct_parser.add_argument("--source-id", required=True)
+    raw_correct_parser.add_argument("--body-file", required=True)
+    raw_redact_parser = sub.add_parser("raw-redact")
+    add_common(raw_redact_parser)
+    raw_redact_parser.add_argument("--source-id", required=True)
+    raw_redact_parser.add_argument("--reason", required=True)
+    raw_show_parser = sub.add_parser("raw-show")
+    add_common(raw_show_parser)
+    raw_show_parser.add_argument("--source-id", required=True)
     improvement_parser = sub.add_parser("note-improvement")
     add_common(improvement_parser)
     improvement_parser.add_argument("--title", required=True)
@@ -1643,6 +2091,13 @@ def main() -> int:
             print(json.dumps(data, indent=2, sort_keys=True))
         else:
             print_concept_plan(data)
+        return 0
+    if args.command == "compile-plan":
+        data = compile_plan(repo, source=args.source, raw_source_id=args.source_id, limit=args.limit)
+        if json_output:
+            print(json.dumps(data, indent=2, sort_keys=True))
+        else:
+            print_compile_plan(data)
         return 0
     if args.command == "init":
         data = init_wiki(repo, force=args.force)
@@ -1679,6 +2134,22 @@ def main() -> int:
     if args.command == "refresh-manifest":
         data = save_manifest(repo)
         print(json.dumps(data, indent=2, sort_keys=True) if json_output else f"Indexed {data['concept_count']} concept(s).")
+        return 0
+    if args.command == "raw-add":
+        data = raw_add(repo, args.kind, args.title, Path(args.body_file), source_url=args.source_url)
+        print(json.dumps(data, indent=2, sort_keys=True) if json_output else f"Created {data['path']}")
+        return 0
+    if args.command == "raw-correct":
+        data = raw_correct(repo, args.source_id, Path(args.body_file))
+        print(json.dumps(data, indent=2, sort_keys=True) if json_output else f"Created {data['path']}")
+        return 0
+    if args.command == "raw-redact":
+        data = raw_redact(repo, args.source_id, args.reason)
+        print(json.dumps(data, indent=2, sort_keys=True) if json_output else f"Redacted {data['path']}")
+        return 0
+    if args.command == "raw-show":
+        data = raw_show(repo, args.source_id)
+        print(json.dumps(data, indent=2, sort_keys=True) if json_output else data["body"], end="" if not json_output else "\n")
         return 0
     if args.command == "note-improvement":
         data = append_improvement_note(

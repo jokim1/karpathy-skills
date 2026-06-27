@@ -1,4 +1,5 @@
 import importlib.util
+import json
 import os
 import shutil
 import subprocess
@@ -73,6 +74,15 @@ class WikiToolTests(unittest.TestCase):
         path.parent.mkdir(parents=True, exist_ok=True)
         path.write_text(body, encoding="utf-8")
         return path
+
+    def write_raw_body(self, name, body):
+        path = self.repo / name
+        path.write_text(body, encoding="utf-8")
+        return path
+
+    def commit_all(self, message):
+        git(self.repo, "add", ".")
+        git(self.repo, "commit", "-m", message)
 
     def test_init_creates_structure_and_does_not_overwrite_existing_files(self):
         first = wiki_tool.init_wiki(self.repo)
@@ -182,6 +192,186 @@ class WikiToolTests(unittest.TestCase):
         self.assertIn('"candidates"', result.stdout)
         self.assertIn("knowledge/wiki/components/auth-session.md", result.stdout)
 
+    def test_raw_add_writes_required_frontmatter_json_and_stable_hash(self):
+        body_file = self.write_raw_body("ticket.txt", "Customer says search fails.\n")
+
+        result = wiki_tool.raw_add(
+            self.repo,
+            "tickets",
+            "Search Bug",
+            body_file,
+            source_url="https://example.test/tickets/1",
+        )
+        path = self.repo / result["path"]
+        frontmatter, body = wiki_tool.parse_frontmatter(path.read_text(encoding="utf-8"))
+
+        self.assertRegex(result["source_id"], r"^tickets-search-bug-\d{4}-\d{2}-\d{2}$")
+        self.assertEqual("knowledge/raw/tickets/" + result["source_id"] + ".md", result["path"])
+        self.assertEqual("Raw Source", frontmatter["type"])
+        self.assertEqual(result["source_id"], frontmatter["source_id"])
+        self.assertEqual("tickets", frontmatter["kind"])
+        self.assertEqual("Search Bug", frontmatter["title"])
+        self.assertEqual("https://example.test/tickets/1", frontmatter["source_url"])
+        self.assertEqual(git(self.repo, "rev-parse", "--short", "HEAD").stdout.strip(), frontmatter["source_commit"])
+        self.assertEqual("Customer says search fails.\n", body)
+        self.assertEqual(wiki_tool.sha256_text(body), frontmatter["sha256"])
+        self.assertEqual(frontmatter["sha256"], result["sha256"])
+        self.assertEqual(frontmatter["timestamp"], result["created"])
+        self.assertEqual("", result["supersedes"])
+        self.assertFalse(result["redacted"])
+
+    def test_raw_add_never_overwrites_existing_record(self):
+        first_body = self.write_raw_body("first.txt", "First ticket body.\n")
+        second_body = self.write_raw_body("second.txt", "Second ticket body.\n")
+
+        first = wiki_tool.raw_add(self.repo, "tickets", "Duplicate Title", first_body)
+        first_text = (self.repo / first["path"]).read_text(encoding="utf-8")
+        second = wiki_tool.raw_add(self.repo, "tickets", "Duplicate Title", second_body)
+
+        self.assertNotEqual(first["source_id"], second["source_id"])
+        self.assertTrue(second["source_id"].endswith("-2"))
+        self.assertEqual(first_text, (self.repo / first["path"]).read_text(encoding="utf-8"))
+        self.assertEqual("Second ticket body.\n", second["body"])
+
+    def test_raw_correct_creates_append_only_record_referencing_prior_source(self):
+        original_body = self.write_raw_body("original.txt", "Original meeting note.\n")
+        correction_body = self.write_raw_body("correction.txt", "Corrected meeting note.\n")
+        original = wiki_tool.raw_add(self.repo, "meeting-notes", "Planning Sync", original_body)
+
+        correction = wiki_tool.raw_correct(self.repo, original["source_id"], correction_body)
+        frontmatter, body = wiki_tool.parse_frontmatter((self.repo / correction["path"]).read_text(encoding="utf-8"))
+        original_frontmatter, original_stored_body = wiki_tool.parse_frontmatter(
+            (self.repo / original["path"]).read_text(encoding="utf-8")
+        )
+
+        self.assertNotEqual(original["source_id"], correction["source_id"])
+        self.assertEqual(original["source_id"], correction["supersedes"])
+        self.assertEqual(original["source_id"], frontmatter["supersedes"])
+        self.assertEqual("Correction for Planning Sync", frontmatter["title"])
+        self.assertEqual("Corrected meeting note.\n", body)
+        self.assertEqual("Original meeting note.\n", original_stored_body)
+        self.assertNotIn("supersedes", original_frontmatter)
+
+    def test_raw_redact_replaces_body_sets_redacted_and_preserves_metadata(self):
+        body_file = self.write_raw_body("support-note.txt", "Support note that should later be removed.\n")
+        original = wiki_tool.raw_add(self.repo, "tickets", "Support Note", body_file)
+
+        redacted = wiki_tool.raw_redact(self.repo, original["source_id"], "User requested removal")
+        frontmatter, body = wiki_tool.parse_frontmatter((self.repo / redacted["path"]).read_text(encoding="utf-8"))
+
+        self.assertEqual(original["path"], redacted["path"])
+        self.assertEqual(original["source_id"], redacted["source_id"])
+        self.assertEqual("Support Note", frontmatter["title"])
+        self.assertEqual(original["created"], frontmatter["timestamp"])
+        self.assertEqual("true", frontmatter["redacted"])
+        self.assertTrue(redacted["redacted"])
+        self.assertIn("[REDACTED]", body)
+        self.assertIn("User requested removal", body)
+        self.assertNotIn("Support note that should later be removed", body)
+        self.assertEqual(wiki_tool.sha256_text(body), frontmatter["sha256"])
+
+    def test_raw_add_rejects_large_binary_and_secret_like_inputs(self):
+        large = self.repo / "large.txt"
+        large.write_text("a" * (wiki_tool.RAW_MAX_BYTES + 1), encoding="utf-8")
+        binary = self.repo / "binary.bin"
+        binary.write_bytes(b"text\x00more")
+        secret = self.write_raw_body("secret.txt", "api_key = '1234567890abcdef'\n")
+
+        for path in (large, binary, secret):
+            with self.subTest(path=path.name):
+                with self.assertRaises(SystemExit):
+                    wiki_tool.raw_add(self.repo, "tickets", "Unsafe Input", path)
+
+    def test_raw_cli_emits_json_contract_for_add_and_show(self):
+        body_file = self.write_raw_body("cli-ticket.txt", "CLI captured note.\n")
+
+        add = run(
+            [
+                sys.executable,
+                str(SCRIPT),
+                "raw-add",
+                "--repo",
+                str(self.repo),
+                "--json",
+                "--kind",
+                "tickets",
+                "--title",
+                "CLI Ticket",
+                "--body-file",
+                str(body_file),
+            ],
+            self.repo,
+        )
+        add_data = json.loads(add.stdout)
+        show = run(
+            [
+                sys.executable,
+                str(SCRIPT),
+                "raw-show",
+                "--repo",
+                str(self.repo),
+                "--json",
+                "--source-id",
+                add_data["source_id"],
+            ],
+            self.repo,
+        )
+        show_data = json.loads(show.stdout)
+
+        for key in ("path", "source_id", "sha256", "created", "supersedes", "redacted"):
+            self.assertIn(key, add_data)
+            self.assertIn(key, show_data)
+        self.assertEqual(add_data["source_id"], show_data["source_id"])
+        self.assertEqual("CLI captured note.\n", show_data["body"])
+
+    def test_compile_plan_for_git_file_returns_single_bounded_unit(self):
+        (self.repo / "src").mkdir()
+        (self.repo / "src" / "auth.ts").write_text("export const auth = true;\n", encoding="utf-8")
+        self.write_concept("knowledge/wiki/components/auth.md", "../../../src/auth.ts")
+        wiki_tool.save_manifest(self.repo)
+        git(self.repo, "add", "src/auth.ts")
+
+        plan = wiki_tool.compile_plan(self.repo, source="src/auth.ts")
+
+        self.assertEqual("git-file", plan["unit_type"])
+        self.assertEqual(["src/auth.ts"], plan["source_paths"])
+        self.assertEqual(1, plan["source_count"])
+        self.assertEqual("", plan["source_id"])
+        self.assertEqual(
+            [{"path": "knowledge/wiki/components/auth.md", "type": "Component", "title": "Auth Concept", "reason": "already cites src/auth.ts"}],
+            plan["affected_concept_candidates"],
+        )
+        self.assertIn("Compile exactly one bounded source unit at a time.", plan["guidance"])
+
+    def test_compile_plan_for_directory_caps_repo_source_set(self):
+        for index in range(4):
+            self.write_source(f"src/auth/file{index}.ts", f"export const value{index} = true;\n")
+        git(self.repo, "add", "src")
+
+        plan = wiki_tool.compile_plan(self.repo, source="src/auth", limit=2)
+
+        self.assertEqual("repo-source-set", plan["unit_type"])
+        self.assertEqual(["src/auth/file0.ts", "src/auth/file1.ts"], plan["source_paths"])
+        self.assertEqual(2, plan["source_count"])
+        self.assertEqual(2, plan["source_limit"])
+
+    def test_compile_plan_for_raw_source_returns_single_raw_unit(self):
+        body_file = self.write_raw_body("external-note.txt", "External note.\n")
+        raw = wiki_tool.raw_add(self.repo, "external-docs", "External Note", body_file)
+
+        plan = wiki_tool.compile_plan(self.repo, raw_source_id=raw["source_id"])
+
+        self.assertEqual("raw-source", plan["unit_type"])
+        self.assertEqual(raw["source_id"], plan["source_id"])
+        self.assertEqual([raw["path"]], plan["source_paths"])
+        self.assertEqual(1, plan["source_count"])
+
+    def test_compile_plan_rejects_untracked_repo_file(self):
+        self.write_source("src/untracked.ts")
+
+        with self.assertRaises(SystemExit):
+            wiki_tool.compile_plan(self.repo, source="src/untracked.ts")
+
     def test_status_reports_ready_when_concepts_exist(self):
         wiki_tool.init_wiki(self.repo)
         (self.repo / "src").mkdir()
@@ -281,6 +471,16 @@ class WikiToolTests(unittest.TestCase):
         self.assertEqual("all", result["scope"])
         self.assertEqual({"knowledge/wiki/components/auth.md": ["src/auth/new.ts"]}, result["affected_concepts"])
 
+    def test_update_plan_ignores_raw_records_for_source_coverage(self):
+        wiki_tool.init_wiki(self.repo)
+        body_file = self.write_raw_body("ticket-body.txt", "External ticket.\n")
+        raw = wiki_tool.raw_add(self.repo, "tickets", "External Ticket", body_file)
+
+        result = wiki_tool.affected_report(self.repo)
+
+        self.assertEqual({}, result["affected_concepts"])
+        self.assertNotIn(raw["path"], result["missing_concept_coverage"])
+
     def test_doctor_reports_missing_wiki(self):
         result = wiki_tool.doctor(self.repo)
 
@@ -320,6 +520,70 @@ class WikiToolTests(unittest.TestCase):
             ("knowledge/wiki/.karpathy-wiki.json", "persisted manifest is stale; run refresh-manifest"),
             issues,
         )
+
+    def test_doctor_reports_unreachable_concept_page_as_warning(self):
+        (self.repo / "src").mkdir()
+        (self.repo / "src" / "auth.ts").write_text("export const auth = true;\n", encoding="utf-8")
+        (self.repo / "knowledge" / "wiki").mkdir(parents=True)
+        (self.repo / "knowledge" / "wiki" / "index.md").write_text("# Index\n", encoding="utf-8")
+        (self.repo / "knowledge" / "wiki" / "log.md").write_text("# Log\n", encoding="utf-8")
+        concept = self.write_concept("knowledge/wiki/components/auth.md", "../../../src/auth.ts")
+        concept.write_text(
+            concept.read_text(encoding="utf-8").replace("confidence: high", "source_commit: abc123\nconfidence: high"),
+            encoding="utf-8",
+        )
+        wiki_tool.save_manifest(self.repo)
+
+        result = wiki_tool.doctor(self.repo)
+
+        self.assertIn(
+            {
+                "severity": "warning",
+                "path": "knowledge/wiki/components/auth.md",
+                "message": "concept page is not reachable from knowledge/wiki/index.md",
+            },
+            result["issues"],
+        )
+
+    def test_doctor_reports_missing_source_commit_and_missing_raw_source_id(self):
+        (self.repo / "src").mkdir()
+        (self.repo / "src" / "auth.ts").write_text("export const auth = true;\n", encoding="utf-8")
+        (self.repo / "knowledge" / "wiki").mkdir(parents=True)
+        (self.repo / "knowledge" / "wiki" / "index.md").write_text("[Auth](components/auth.md)\n", encoding="utf-8")
+        (self.repo / "knowledge" / "wiki" / "log.md").write_text("# Log\n", encoding="utf-8")
+        self.write_concept("knowledge/wiki/components/auth.md", "../../../src/auth.ts", body="raw:missing-ticket\n")
+        wiki_tool.save_manifest(self.repo)
+
+        result = wiki_tool.doctor(self.repo)
+        issues = [(issue["severity"], issue["path"], issue["message"]) for issue in result["issues"]]
+
+        self.assertIn(
+            ("warning", "knowledge/wiki/components/auth.md", "missing frontmatter field: source_commit"),
+            issues,
+        )
+        self.assertIn(
+            ("warning", "knowledge/wiki/components/auth.md", "raw source id does not resolve: missing-ticket"),
+            issues,
+        )
+
+    def test_doctor_treats_directory_index_links_as_reachable(self):
+        (self.repo / "src").mkdir()
+        (self.repo / "src" / "auth.ts").write_text("export const auth = true;\n", encoding="utf-8")
+        (self.repo / "knowledge" / "wiki" / "components").mkdir(parents=True)
+        (self.repo / "knowledge" / "wiki" / "index.md").write_text("[Components](components/)\n", encoding="utf-8")
+        (self.repo / "knowledge" / "wiki" / "components" / "index.md").write_text("[Auth](auth.md)\n", encoding="utf-8")
+        (self.repo / "knowledge" / "wiki" / "log.md").write_text("# Log\n", encoding="utf-8")
+        concept = self.write_concept("knowledge/wiki/components/auth.md", "../../../src/auth.ts")
+        concept.write_text(
+            concept.read_text(encoding="utf-8").replace("confidence: high", "source_commit: abc123\nconfidence: high"),
+            encoding="utf-8",
+        )
+        wiki_tool.save_manifest(self.repo)
+
+        result = wiki_tool.doctor(self.repo)
+        messages = [issue["message"] for issue in result["issues"] if issue["path"] == "knowledge/wiki/components/auth.md"]
+
+        self.assertNotIn("concept page is not reachable from knowledge/wiki/index.md", messages)
 
     def test_reminder_hook_prints_canonical_command_and_exits_zero_by_default(self):
         (self.repo / "src").mkdir()
