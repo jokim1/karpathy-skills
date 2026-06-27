@@ -9,6 +9,7 @@ import os
 import re
 import stat
 import subprocess
+from collections import Counter, defaultdict
 from dataclasses import dataclass
 from datetime import datetime, timezone
 from pathlib import Path
@@ -95,6 +96,88 @@ DOMAIN_SIGNAL_KEYWORDS = (
     "service",
     "store",
 )
+HISTORY_DEFAULT_MAX_COMMITS = 200
+HISTORY_DEFAULT_SINCE = "180.days"
+HISTORY_MAX_FILES_PER_COMMIT = 200
+HISTORY_RISK_KEYWORDS = (
+    "auth",
+    "billing",
+    "cache",
+    "delete",
+    "deploy",
+    "migration",
+    "permission",
+    "secret",
+    "security",
+    "session",
+    "token",
+)
+HISTORY_BUGFIX_RE = re.compile(r"\b(bug|fix|fixed|hotfix|regression|revert|rollback|broken|fail|failure)\b", re.IGNORECASE)
+HISTORY_LOCKFILE_NAMES = {
+    "Cargo.lock",
+    "Gemfile.lock",
+    "package-lock.json",
+    "pnpm-lock.yaml",
+    "yarn.lock",
+}
+HISTORY_GENERATED_PARTS = IGNORED_SCAN_PARTS | {"__pycache__", ".pytest_cache", ".turbo"}
+HISTORY_MATCH_STOPWORDS = {
+    "api",
+    "app",
+    "apps",
+    "client",
+    "component",
+    "components",
+    "config",
+    "data",
+    "docs",
+    "feature",
+    "features",
+    "flow",
+    "helper",
+    "helpers",
+    "index",
+    "lib",
+    "local",
+    "package",
+    "packages",
+    "page",
+    "pages",
+    "public",
+    "queries",
+    "query",
+    "repository",
+    "route",
+    "routes",
+    "server",
+    "service",
+    "services",
+    "shared",
+    "source",
+    "spec",
+    "src",
+    "test",
+    "tests",
+    "type",
+    "types",
+    "util",
+    "utils",
+    "wiki",
+    "workflow",
+    "workflows",
+}
+SCORING_WEIGHTS = {
+    "coverage": 25,
+    "history": 20,
+    "intent": 0,
+    "risk": 15,
+    "verification": 10,
+    "structure": 10,
+}
+SCORING_PENALTIES = {
+    "staleness": 10,
+    "size": 10,
+}
 
 
 @dataclass
@@ -102,6 +185,33 @@ class Issue:
     severity: str
     path: str
     message: str
+
+
+@dataclass
+class HistoryCommit:
+    sha: str
+    timestamp: int
+    subject: str
+    paths: list[str]
+
+
+@dataclass
+class PlanningTask:
+    id: str
+    kind: str
+    weight: int
+    paths: list[str]
+    terms: list[str]
+    evidence: str
+
+
+@dataclass
+class ScoredCandidate:
+    candidate: dict[str, Any]
+    score: int
+    evidence: dict[str, list[str]]
+    covered_tasks: list[str]
+    score_breakdown: dict[str, int]
 
 
 def now_iso() -> str:
@@ -113,6 +223,13 @@ def run_git(repo: Path, args: list[str]) -> str:
         return subprocess.check_output(["git", *args], cwd=repo, text=True, stderr=subprocess.DEVNULL).strip()
     except (subprocess.CalledProcessError, FileNotFoundError):
         return ""
+
+
+def run_git_bytes(repo: Path, args: list[str]) -> bytes:
+    try:
+        return subprocess.check_output(["git", *args], cwd=repo, stderr=subprocess.DEVNULL)
+    except (subprocess.CalledProcessError, FileNotFoundError):
+        return b""
 
 
 def resolve_repo(path: str | None) -> Path:
@@ -895,7 +1012,419 @@ def smoke_test_recipe_candidate(repo: Path) -> dict[str, Any] | None:
     )
 
 
-def concept_plan(repo: Path, limit: int = 8, scan: dict[str, Any] | None = None) -> dict[str, Any]:
+def history_path_is_noise(path: str) -> bool:
+    normalized = normalize_repo_path(path)
+    if not normalized:
+        return True
+    if normalized.startswith("knowledge/wiki/") or normalized.startswith("knowledge/outputs/"):
+        return True
+    path_obj = Path(normalized)
+    if path_obj.name in HISTORY_LOCKFILE_NAMES:
+        return True
+    return any(part in HISTORY_GENERATED_PARTS for part in path_obj.parts)
+
+
+def path_terms(path: str) -> list[str]:
+    normalized = normalize_repo_path(path).lower()
+    terms = [term for term in re.split(r"[^a-z0-9]+", normalized) if len(term) > 1]
+    suffix = Path(normalized).suffix.lower().lstrip(".")
+    if suffix in terms:
+        terms.remove(suffix)
+    return terms
+
+
+def history_match_terms(value: str) -> list[str]:
+    return [
+        term
+        for term in path_terms(value)
+        if term not in HISTORY_MATCH_STOPWORDS and not term.isdigit()
+    ]
+
+
+def candidate_terms(candidate: dict[str, Any]) -> set[str]:
+    values = [
+        str(candidate.get("path", "")),
+        str(candidate.get("title", "")),
+        str(candidate.get("resource", "")),
+        str(candidate.get("reason", "")),
+        " ".join(str(item) for item in candidate.get("read", [])),
+    ]
+    return {term for value in values for term in history_match_terms(value)}
+
+
+def path_is_test(path: str) -> bool:
+    parts = Path(normalize_repo_path(path)).parts
+    name = Path(path).name.lower()
+    return (
+        any(part in TEST_DIR_NAMES or part in {"__tests__"} for part in parts)
+        or ".test." in name
+        or ".spec." in name
+        or name.endswith("_test.py")
+    )
+
+
+def important_directory(path: str) -> str:
+    parts = Path(normalize_repo_path(path)).parts
+    if not parts:
+        return ""
+    if len(parts) >= 3 and parts[0] == "src" and parts[1] == "features":
+        return "/".join(parts[:3])
+    if len(parts) >= 2 and parts[0] in {"packages", "plugins"}:
+        return "/".join(parts[:2])
+    if len(parts) >= 2 and parts[0] in {"src", "app", "lib", "server", "client"}:
+        return "/".join(parts[:2])
+    return parts[0]
+
+
+def parse_history_log(raw: bytes) -> list[HistoryCommit]:
+    text = raw.decode("utf-8", errors="replace")
+    commits: list[HistoryCommit] = []
+    for chunk in text.split("\x1e"):
+        chunk = chunk.strip("\n")
+        if not chunk:
+            continue
+        lines = [line for line in chunk.splitlines() if line.strip()]
+        if not lines:
+            continue
+        header = lines[0].split("\x1f", 2)
+        if len(header) != 3:
+            continue
+        sha, timestamp_text, subject = header
+        try:
+            timestamp = int(timestamp_text)
+        except ValueError:
+            timestamp = 0
+        paths: list[str] = []
+        seen_paths: set[str] = set()
+        for line in lines[1:]:
+            path = normalize_repo_path(line)
+            if history_path_is_noise(path) or path in seen_paths:
+                continue
+            seen_paths.add(path)
+            paths.append(path)
+            if len(paths) >= HISTORY_MAX_FILES_PER_COMMIT:
+                break
+        if paths:
+            commits.append(HistoryCommit(sha=sha, timestamp=timestamp, subject=subject.strip(), paths=paths))
+    return commits
+
+
+def git_history_commits(
+    repo: Path,
+    max_commits: int = HISTORY_DEFAULT_MAX_COMMITS,
+    since: str = HISTORY_DEFAULT_SINCE,
+) -> list[HistoryCommit]:
+    args = [
+        "log",
+        f"--max-count={max(1, max_commits)}",
+        f"--since={since}",
+        "--name-only",
+        "--format=format:%x1e%H%x1f%ct%x1f%s",
+        "--",
+    ]
+    return parse_history_log(run_git_bytes(repo, args))
+
+
+def history_signals(
+    repo: Path,
+    max_commits: int = HISTORY_DEFAULT_MAX_COMMITS,
+    since: str = HISTORY_DEFAULT_SINCE,
+) -> dict[str, Any]:
+    commits = git_history_commits(repo, max_commits=max_commits, since=since)
+    path_counts: Counter[str] = Counter()
+    directory_counts: Counter[str] = Counter()
+    risk_counts: Counter[str] = Counter()
+    bugfix_counts: Counter[str] = Counter()
+    test_coupled_counts: Counter[str] = Counter()
+    cochange_clusters: list[dict[str, Any]] = []
+
+    for index, commit in enumerate(commits):
+        unique_paths = [path for path in commit.paths if not history_path_is_noise(path)]
+        if not unique_paths:
+            continue
+        recency_weight = max(1, 6 - index // 25)
+        is_bugfix = bool(HISTORY_BUGFIX_RE.search(commit.subject))
+        risky_terms = {
+            keyword
+            for keyword in HISTORY_RISK_KEYWORDS
+            if keyword in commit.subject.lower() or any(keyword in path.lower() for path in unique_paths)
+        }
+        test_paths = [path for path in unique_paths if path_is_test(path)]
+        source_paths = [path for path in unique_paths if not path_is_test(path)]
+        for path in unique_paths:
+            path_counts[path] += recency_weight
+            directory = important_directory(path)
+            if directory:
+                directory_counts[directory] += recency_weight
+            if risky_terms:
+                risk_counts[path] += recency_weight + len(risky_terms)
+            if is_bugfix:
+                bugfix_counts[path] += recency_weight
+        if test_paths and source_paths:
+            for path in source_paths:
+                test_coupled_counts[path] += recency_weight
+        if len(source_paths) >= 2:
+            cochange_clusters.append(
+                {
+                    "id": commit.sha[:12],
+                    "subject": commit.subject,
+                    "paths": source_paths[:25],
+                    "weight": recency_weight + (4 if is_bugfix else 0) + min(4, len(risky_terms)),
+                    "risk_terms": sorted(risky_terms),
+                    "bugfix": is_bugfix,
+                    "test_coupled": bool(test_paths),
+                }
+            )
+
+    cochange_clusters.sort(key=lambda item: (-int(item["weight"]), item["id"]))
+    return {
+        "commit_count": len(commits),
+        "max_commits": max_commits,
+        "since": since,
+        "high_churn_paths": [{"path": path, "score": score} for path, score in path_counts.most_common(20)],
+        "high_churn_directories": [{"path": path, "score": score} for path, score in directory_counts.most_common(20)],
+        "risky_paths": [{"path": path, "score": score} for path, score in risk_counts.most_common(20)],
+        "bugfix_paths": [{"path": path, "score": score} for path, score in bugfix_counts.most_common(20)],
+        "test_coupled_paths": [{"path": path, "score": score} for path, score in test_coupled_counts.most_common(20)],
+        "cochange_clusters": cochange_clusters[:30],
+    }
+
+
+def planning_tasks_from_history(signals: dict[str, Any]) -> list[PlanningTask]:
+    tasks: list[PlanningTask] = []
+    seen: set[str] = set()
+
+    for cluster in signals.get("cochange_clusters", [])[:20]:
+        paths = [normalize_repo_path(path) for path in cluster.get("paths", []) if normalize_repo_path(path)]
+        if not paths:
+            continue
+        task_id = f"cochange:{cluster.get('id', len(tasks))}"
+        seen.add(task_id)
+        terms = sorted({term for path in paths for term in history_match_terms(path)})
+        tasks.append(
+            PlanningTask(
+                id=task_id,
+                kind="cochange",
+                weight=max(1, min(12, int(cluster.get("weight", 1)))),
+                paths=paths,
+                terms=terms,
+                evidence=f"{cluster.get('subject', 'files changed together')}",
+            )
+        )
+
+    for item in signals.get("high_churn_directories", [])[:10]:
+        path = normalize_repo_path(str(item.get("path", "")))
+        if not path:
+            continue
+        task_id = f"churn:{path}"
+        if task_id in seen:
+            continue
+        seen.add(task_id)
+        tasks.append(
+            PlanningTask(
+                id=task_id,
+                kind="churn",
+                weight=max(1, min(10, int(item.get("score", 1)))),
+                paths=[path],
+                terms=history_match_terms(path),
+                evidence=f"{path} changed frequently in recent history.",
+            )
+        )
+
+    for item in signals.get("risky_paths", [])[:10]:
+        path = normalize_repo_path(str(item.get("path", "")))
+        if not path:
+            continue
+        task_id = f"risk:{path}"
+        if task_id in seen:
+            continue
+        seen.add(task_id)
+        terms = sorted(set(history_match_terms(path)) | {term for term in HISTORY_RISK_KEYWORDS if term in path.lower()})
+        tasks.append(
+            PlanningTask(
+                id=task_id,
+                kind="risk",
+                weight=max(4, min(12, int(item.get("score", 4)))),
+                paths=[path],
+                terms=terms,
+                evidence=f"{path} matches risky history keywords or bugfix commits.",
+            )
+        )
+
+    for item in signals.get("test_coupled_paths", [])[:10]:
+        path = normalize_repo_path(str(item.get("path", "")))
+        if not path:
+            continue
+        task_id = f"verification:{path}"
+        if task_id in seen:
+            continue
+        seen.add(task_id)
+        tasks.append(
+            PlanningTask(
+                id=task_id,
+                kind="verification",
+                weight=max(3, min(8, int(item.get("score", 3)))),
+                paths=[path],
+                terms=history_match_terms(path),
+                evidence=f"{path} changed with tests in recent history.",
+            )
+        )
+
+    return tasks
+
+
+def candidate_covers_task(repo: Path, candidate: dict[str, Any], task: PlanningTask) -> bool:
+    resource = normalize_repo_path(str(candidate.get("resource", "")))
+    read_paths = [normalize_repo_path(str(path)) for path in candidate.get("read", [])]
+    for path in task.paths:
+        normalized = normalize_repo_path(path)
+        if resource and resource_matches(repo, normalized, resource, resource_kind(repo, resource)):
+            return True
+        if any(normalized == read_path or normalized.startswith(read_path + "/") for read_path in read_paths):
+            return True
+    terms = candidate_terms(candidate)
+    task_terms = set(task.terms)
+    return len(terms & task_terms) >= 2
+
+
+def evidence_for_candidate(candidate: dict[str, Any], covered_tasks: list[PlanningTask]) -> dict[str, list[str]]:
+    evidence: dict[str, list[str]] = defaultdict(list)
+    for task in covered_tasks:
+        if task.kind == "verification":
+            key = "verification"
+        elif task.kind == "risk":
+            key = "risk"
+        elif task.kind == "churn":
+            key = "history"
+        else:
+            key = "coverage"
+        if task.evidence not in evidence[key]:
+            evidence[key].append(task.evidence)
+    if candidate.get("reason"):
+        evidence["structure"].append(str(candidate["reason"]))
+    return {key: values[:5] for key, values in sorted(evidence.items())}
+
+
+def acceptance_queries_for_candidate(candidate: dict[str, Any], covered_tasks: list[PlanningTask]) -> list[str]:
+    title = str(candidate.get("title", "concept")).strip() or "concept"
+    queries = [
+        f"how does {title.lower()} work?",
+        f"where do I change {title.lower()}?",
+    ]
+    for question in candidate.get("questions", []):
+        if question and question not in queries:
+            queries.append(str(question))
+    for task in covered_tasks[:2]:
+        if task.kind in {"risk", "verification"} and task.terms:
+            term_text = " ".join(task.terms[:4])
+            query = f"what should I verify for {term_text}?"
+            if query not in queries:
+                queries.append(query)
+    return queries[:5]
+
+
+def score_candidate(repo: Path, candidate: dict[str, Any], tasks: list[PlanningTask]) -> ScoredCandidate:
+    covered = [task for task in tasks if candidate_covers_task(repo, candidate, task)]
+    coverage_weight = sum(task.weight for task in covered)
+    risky_weight = sum(task.weight for task in covered if task.kind == "risk")
+    verification_weight = sum(task.weight for task in covered if task.kind == "verification")
+    structure_score = max(1, min(SCORING_WEIGHTS["structure"], int((110 - int(candidate.get("priority", 100))) / 10)))
+    if candidate.get("type") == "Test Surface":
+        verification_weight += 10
+    resource = normalize_repo_path(str(candidate.get("resource", "")))
+    resource_file_count = len(source_files_under(repo, resource, limit=200)) if resource else 0
+    size_penalty = 0
+    if resource_file_count > 120:
+        size_penalty = SCORING_PENALTIES["size"]
+    elif resource_file_count > 50:
+        size_penalty = 5
+    breakdown = {
+        "coverage": min(SCORING_WEIGHTS["coverage"], coverage_weight),
+        "history": min(SCORING_WEIGHTS["history"], coverage_weight),
+        "intent": 0,
+        "risk": min(SCORING_WEIGHTS["risk"], risky_weight),
+        "verification": min(SCORING_WEIGHTS["verification"], verification_weight),
+        "structure": structure_score,
+        "staleness_penalty": 0,
+        "size_penalty": size_penalty,
+    }
+    total = (
+        breakdown["coverage"]
+        + breakdown["history"]
+        + breakdown["intent"]
+        + breakdown["risk"]
+        + breakdown["verification"]
+        + breakdown["structure"]
+        - breakdown["staleness_penalty"]
+        - breakdown["size_penalty"]
+    )
+    return ScoredCandidate(
+        candidate=candidate,
+        score=max(0, min(100, total)),
+        evidence=evidence_for_candidate(candidate, covered),
+        covered_tasks=[task.id for task in covered],
+        score_breakdown=breakdown,
+    )
+
+
+def select_scored_candidates(repo: Path, scored: list[ScoredCandidate], tasks: list[PlanningTask], limit: int) -> list[ScoredCandidate]:
+    if not scored:
+        return []
+    if not tasks:
+        return sorted(scored, key=lambda item: (-item.score, item.candidate["path"]))[:limit]
+    task_by_id = {task.id: task for task in tasks}
+    uncovered = set(task_by_id)
+    selected: list[ScoredCandidate] = []
+    remaining = scored[:]
+    while remaining and len(selected) < limit:
+        best_index = 0
+        best_value = -1
+        for index, item in enumerate(remaining):
+            newly_covered = [task_by_id[task_id] for task_id in item.covered_tasks if task_id in uncovered]
+            marginal = sum(task.weight for task in newly_covered)
+            overlap_penalty = max(0, len(item.covered_tasks) - len(newly_covered))
+            value = marginal * 3 + item.score - overlap_penalty
+            if value > best_value:
+                best_value = value
+                best_index = index
+        chosen = remaining.pop(best_index)
+        newly_covered_ids = set(chosen.covered_tasks) & uncovered
+        if selected and not newly_covered_ids and chosen.score < 20:
+            remaining.append(chosen)
+            break
+        selected.append(chosen)
+        uncovered -= newly_covered_ids
+    if len(selected) < limit:
+        selected.extend(sorted(remaining, key=lambda item: (-item.score, item.candidate["path"]))[: limit - len(selected)])
+    return selected
+
+
+def scored_candidate_to_dict(scored: ScoredCandidate, covered_tasks: list[PlanningTask]) -> dict[str, Any]:
+    data = dict(scored.candidate)
+    covered_by_id = {task.id: task for task in covered_tasks}
+    data.update(
+        {
+            "score": scored.score,
+            "score_breakdown": scored.score_breakdown,
+            "evidence": scored.evidence,
+            "covered_tasks": scored.covered_tasks,
+            "acceptance_queries": acceptance_queries_for_candidate(
+                scored.candidate,
+                [covered_by_id[task_id] for task_id in scored.covered_tasks if task_id in covered_by_id],
+            ),
+        }
+    )
+    return data
+
+
+def concept_plan(
+    repo: Path,
+    limit: int = 8,
+    scan: dict[str, Any] | None = None,
+    include_history: bool = False,
+    max_commits: int = HISTORY_DEFAULT_MAX_COMMITS,
+    since: str = HISTORY_DEFAULT_SINCE,
+) -> dict[str, Any]:
     data = scan or scan_repo(repo)
     candidates: list[dict[str, Any]] = []
 
@@ -929,14 +1458,25 @@ def concept_plan(repo: Path, limit: int = 8, scan: dict[str, Any] | None = None)
         seen.add(path)
         unique.append(candidate)
 
+    history_data: dict[str, Any] | None = None
+    planning_tasks: list[PlanningTask] = []
+    if include_history:
+        history_data = history_signals(repo, max_commits=max_commits, since=since)
+        planning_tasks = planning_tasks_from_history(history_data)
+        scored = [score_candidate(repo, candidate, planning_tasks) for candidate in unique]
+        selected = select_scored_candidates(repo, scored, planning_tasks, limit=limit)
+        selected_candidates = [scored_candidate_to_dict(item, planning_tasks) for item in selected]
+    else:
+        selected_candidates = unique[:limit]
+
     concept_count = len(concept_files(repo)) if wiki_dir(repo).exists() else 0
     setup_state, _ = wiki_setup_state(repo, concept_count)
-    return {
+    result = {
         "repo": str(repo),
         "wiki_root": "knowledge/wiki",
         "setup_state": setup_state,
-        "candidate_count": len(unique[:limit]),
-        "candidates": unique[:limit],
+        "candidate_count": len(selected_candidates),
+        "candidates": selected_candidates,
         "guidance": [
             "Use these as a ranked plan, not as generated content.",
             "Read each candidate's read list before writing a concept page.",
@@ -944,6 +1484,31 @@ def concept_plan(repo: Path, limit: int = 8, scan: dict[str, Any] | None = None)
             "Every implementation-relevant claim still needs a source citation.",
         ],
     }
+    if include_history and history_data is not None:
+        result["history_signals"] = {
+            "commit_count": history_data["commit_count"],
+            "max_commits": history_data["max_commits"],
+            "since": history_data["since"],
+            "high_churn_directories": history_data["high_churn_directories"][:8],
+            "cochange_cluster_count": len(history_data["cochange_clusters"]),
+        }
+        result["planning_tasks"] = [
+            {
+                "id": task.id,
+                "kind": task.kind,
+                "weight": task.weight,
+                "paths": task.paths,
+                "evidence": task.evidence,
+            }
+            for task in planning_tasks[:30]
+        ]
+        result["scoring_model"] = {
+            "range": "0-100",
+            "weights": SCORING_WEIGHTS,
+            "penalties": SCORING_PENALTIES,
+            "selection": "greedy weighted set cover over planning_tasks",
+        }
+    return result
 
 
 def starter_concept_candidates(repo: Path, scan: dict[str, Any] | None = None) -> list[dict[str, str]]:
@@ -1531,13 +2096,32 @@ def print_concept_plan(data: dict[str, Any]) -> None:
     if candidates:
         for candidate in candidates:
             resource = f" citing {candidate['resource']}" if candidate.get("resource") else ""
-            print(f"- {candidate['path']} ({candidate['type']}: {candidate['title']}){resource}")
+            score = f" score={candidate['score']}" if "score" in candidate else ""
+            print(f"- {candidate['path']} ({candidate['type']}: {candidate['title']}){resource}{score}")
             print(f"  reason: {candidate['reason']}")
             reads = candidate.get("read", [])
             if reads:
                 print("  read: " + ", ".join(reads))
+            evidence = candidate.get("evidence", {})
+            if evidence:
+                evidence_bits = []
+                for key, values in evidence.items():
+                    if values:
+                        evidence_bits.append(f"{key}: {values[0]}")
+                if evidence_bits:
+                    print("  evidence: " + " | ".join(evidence_bits[:3]))
+            queries = candidate.get("acceptance_queries", [])
+            if queries:
+                print("  acceptance: " + " ; ".join(queries[:2]))
     else:
         print("- None detected")
+    if data.get("history_signals"):
+        history = data["history_signals"]
+        print("\n## History Signals")
+        print(f"- commits analyzed: {history.get('commit_count', 0)}")
+        directories = history.get("high_churn_directories", [])
+        if directories:
+            print("- high-churn directories: " + ", ".join(item["path"] for item in directories[:5]))
     guidance = data.get("guidance", [])
     if guidance:
         print("\n## Guidance")
@@ -1588,6 +2172,9 @@ def main() -> int:
     concept_plan_parser = sub.add_parser("concept-plan")
     add_common(concept_plan_parser)
     concept_plan_parser.add_argument("--limit", type=int, default=8)
+    concept_plan_parser.add_argument("--include-history", action="store_true")
+    concept_plan_parser.add_argument("--max-commits", type=int, default=HISTORY_DEFAULT_MAX_COMMITS)
+    concept_plan_parser.add_argument("--since", default=HISTORY_DEFAULT_SINCE)
     init_parser = sub.add_parser("init")
     add_common(init_parser)
     init_parser.add_argument("--force", action="store_true")
@@ -1638,7 +2225,13 @@ def main() -> int:
             print_scan(data)
         return 0
     if args.command == "concept-plan":
-        data = concept_plan(repo, limit=args.limit)
+        data = concept_plan(
+            repo,
+            limit=args.limit,
+            include_history=args.include_history,
+            max_commits=args.max_commits,
+            since=args.since,
+        )
         if json_output:
             print(json.dumps(data, indent=2, sort_keys=True))
         else:

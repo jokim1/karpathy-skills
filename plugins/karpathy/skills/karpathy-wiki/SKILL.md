@@ -188,6 +188,13 @@ Mode precedence:
    python3 <skill-dir>/scripts/wiki_tool.py concept-plan --repo . --json
    ```
 
+   When recent Git history is available and starter page choice is not obvious,
+   use history as an additional read-only ranking signal:
+
+   ```bash
+   python3 <skill-dir>/scripts/wiki_tool.py concept-plan --repo . --json --include-history
+   ```
+
 4. Create only a small starter wiki in the same flow:
    - `knowledge/wiki/index.md` with repo overview, known commands, and links.
    - `knowledge/wiki/log.md` with the setup entry.
@@ -245,10 +252,18 @@ scaffold is healthy, but the wiki is not useful yet.
    python3 <skill-dir>/scripts/wiki_tool.py concept-plan --repo . --json
    ```
 
+   If static repo shape alone does not make the top 2-5 pages clear, also run:
+
+   ```bash
+   python3 <skill-dir>/scripts/wiki_tool.py concept-plan --repo . --json --include-history
+   ```
+
 2. Use `concept-plan` candidates as concrete options, not as generated content
-   or a mandate. Read each chosen candidate's `read` files before writing
-   claims. Use `starter_candidates` only as the simpler fallback when the
-   concept plan finds nothing useful.
+   or a mandate. History-aware scores, evidence, and acceptance queries help
+   prioritize what to inspect, but they are not wiki content.
+   Read each chosen candidate's `read` files before writing claims. Use
+   `starter_candidates` only as the simpler fallback when the concept plan
+   finds nothing useful.
 3. Propose 2-5 small concept pages. Prefer:
    - one component page for the app/server entrypoint when detected
    - one high-value auth/session, routing/shell, domain data-flow, or

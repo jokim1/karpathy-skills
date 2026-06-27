@@ -74,6 +74,10 @@ class WikiToolTests(unittest.TestCase):
         path.write_text(body, encoding="utf-8")
         return path
 
+    def commit_all(self, message):
+        git(self.repo, "add", ".")
+        git(self.repo, "commit", "-m", message)
+
     def test_init_creates_structure_and_does_not_overwrite_existing_files(self):
         first = wiki_tool.init_wiki(self.repo)
         self.assertTrue((self.repo / "knowledge" / "wiki" / "index.md").exists())
@@ -181,6 +185,201 @@ class WikiToolTests(unittest.TestCase):
 
         self.assertIn('"candidates"', result.stdout)
         self.assertIn("knowledge/wiki/components/auth-session.md", result.stdout)
+
+    def test_concept_plan_default_output_omits_history_fields(self):
+        self.write_source("src/features/auth/session.repository.ts")
+        self.commit_all("add auth")
+        wiki_tool.init_wiki(self.repo)
+
+        plan = wiki_tool.concept_plan(self.repo, limit=3)
+
+        self.assertNotIn("history_signals", plan)
+        self.assertNotIn("planning_tasks", plan)
+        self.assertTrue(plan["candidates"])
+        self.assertNotIn("score", plan["candidates"][0])
+        self.assertNotIn("evidence", plan["candidates"][0])
+
+    def test_concept_plan_include_history_scores_candidates_from_git_history(self):
+        self.write_source("src/features/auth/session.repository.ts", "export const session = 'v1';\n")
+        self.write_source("src/features/auth/AuthSessionSync.tsx", "export const sync = true;\n")
+        self.write_source("src/app/router.tsx", "export const router = true;\n")
+        self.write_source("tests/auth/session.test.ts", "test('session redirect', () => {});\n")
+        self.write_source("dist/generated.js", "generated\n")
+        (self.repo / "package-lock.json").write_text('{"lockfileVersion":3}\n', encoding="utf-8")
+        self.commit_all("fix auth session redirect regression")
+        self.write_source("src/features/auth/session.repository.ts", "export const session = 'v2';\n")
+        self.write_source("src/app/router.tsx", "export const router = 'redirect';\n")
+        self.write_source("tests/auth/session.test.ts", "test('session redirect again', () => {});\n")
+        self.commit_all("fix broken login redirect")
+        wiki_tool.init_wiki(self.repo)
+
+        plan = wiki_tool.concept_plan(self.repo, limit=5, include_history=True)
+        by_path = {candidate["path"]: candidate for candidate in plan["candidates"]}
+
+        self.assertIn("history_signals", plan)
+        self.assertIn("planning_tasks", plan)
+        self.assertIn("scoring_model", plan)
+        self.assertIn("knowledge/wiki/components/auth-session.md", by_path)
+        auth = by_path["knowledge/wiki/components/auth-session.md"]
+        self.assertGreater(auth["score"], 0)
+        self.assertIn("score_breakdown", auth)
+        self.assertIn("covered_tasks", auth)
+        self.assertIn("acceptance_queries", auth)
+        self.assertTrue(auth["evidence"])
+        history_paths = [item["path"] for item in plan["history_signals"]["high_churn_directories"]]
+        self.assertNotIn("dist", history_paths)
+        self.assertNotIn("package-lock.json", history_paths)
+
+    def test_concept_plan_include_history_cli_emits_enriched_fields(self):
+        self.write_source("src/features/auth/session.repository.ts")
+        self.commit_all("fix auth session")
+        wiki_tool.init_wiki(self.repo)
+
+        result = run(
+            [
+                sys.executable,
+                str(SCRIPT),
+                "concept-plan",
+                "--repo",
+                str(self.repo),
+                "--json",
+                "--include-history",
+                "--limit",
+                "3",
+            ],
+            self.repo,
+        )
+
+        self.assertIn('"history_signals"', result.stdout)
+        self.assertIn('"scoring_model"', result.stdout)
+        self.assertIn('"score"', result.stdout)
+
+    def test_weighted_set_cover_prefers_one_cohesive_candidate(self):
+        self.write_source("src/features/auth/session.repository.ts")
+        self.write_source("src/features/auth/redirect.ts")
+        self.write_source("src/app/router.tsx")
+        broad = wiki_tool.concept_plan_candidate(
+            self.repo,
+            "knowledge/wiki/components/auth-session.md",
+            "Component",
+            "Auth Session",
+            "src/features/auth",
+            "Auth owns session and redirect behavior.",
+            read=["src/features/auth/session.repository.ts", "src/features/auth/redirect.ts"],
+            priority=20,
+        )
+        narrow_session = wiki_tool.concept_plan_candidate(
+            self.repo,
+            "knowledge/wiki/components/session-repository.md",
+            "Component",
+            "Session Repository",
+            "src/features/auth/session.repository.ts",
+            "Narrow session repository page.",
+            read=["src/features/auth/session.repository.ts"],
+            priority=20,
+        )
+        narrow_redirect = wiki_tool.concept_plan_candidate(
+            self.repo,
+            "knowledge/wiki/components/auth-redirect.md",
+            "Component",
+            "Auth Redirect",
+            "src/features/auth/redirect.ts",
+            "Narrow redirect page.",
+            read=["src/features/auth/redirect.ts"],
+            priority=20,
+        )
+        tasks = [
+            wiki_tool.PlanningTask(
+                id="churn:1",
+                kind="churn",
+                weight=8,
+                paths=["src/features/auth/session.repository.ts"],
+                terms=["auth", "session"],
+                evidence="session changed frequently",
+            ),
+            wiki_tool.PlanningTask(
+                id="risk:1",
+                kind="risk",
+                weight=6,
+                paths=["src/features/auth/redirect.ts"],
+                terms=["auth", "redirect"],
+                evidence="redirect is risky",
+            ),
+        ]
+        scored = [wiki_tool.score_candidate(self.repo, candidate, tasks) for candidate in [narrow_session, narrow_redirect, broad]]
+
+        selected = wiki_tool.select_scored_candidates(self.repo, scored, tasks, limit=1)
+
+        self.assertEqual("knowledge/wiki/components/auth-session.md", selected[0].candidate["path"])
+
+    def test_weighted_set_cover_fills_limit_with_static_candidates(self):
+        covered = wiki_tool.ScoredCandidate(
+            candidate={"path": "knowledge/wiki/components/auth-session.md"},
+            score=40,
+            evidence={},
+            covered_tasks=["churn:auth"],
+            score_breakdown={},
+        )
+        static = wiki_tool.ScoredCandidate(
+            candidate={"path": "knowledge/wiki/components/app-boot.md"},
+            score=10,
+            evidence={},
+            covered_tasks=[],
+            score_breakdown={},
+        )
+        tasks = [
+            wiki_tool.PlanningTask(
+                id="churn:auth",
+                kind="churn",
+                weight=8,
+                paths=["src/features/auth/session.repository.ts"],
+                terms=["auth", "session"],
+                evidence="auth changed frequently",
+            )
+        ]
+
+        selected = wiki_tool.select_scored_candidates(self.repo, [covered, static], tasks, limit=2)
+
+        self.assertEqual(
+            [
+                "knowledge/wiki/components/auth-session.md",
+                "knowledge/wiki/components/app-boot.md",
+            ],
+            [item.candidate["path"] for item in selected],
+        )
+
+    def test_history_matching_ignores_generic_feature_terms(self):
+        self.write_source("src/features/notes/note.repository.ts")
+        self.write_source("src/features/shell/project-shell.tsx")
+        notes = wiki_tool.concept_plan_candidate(
+            self.repo,
+            "knowledge/wiki/components/note-data-flow.md",
+            "Component",
+            "Note Data Flow",
+            "src/features/notes",
+            "Feature directory has durable data-flow signals: repository.",
+            read=["src/features/notes/note.repository.ts"],
+            priority=20,
+        )
+        shell_task = wiki_tool.PlanningTask(
+            id="churn:shell",
+            kind="churn",
+            weight=8,
+            paths=["src/features/shell/project-shell.tsx"],
+            terms=wiki_tool.history_match_terms("src/features/shell/project-shell.tsx"),
+            evidence="src/features/shell changed frequently",
+        )
+        notes_task = wiki_tool.PlanningTask(
+            id="churn:notes",
+            kind="churn",
+            weight=8,
+            paths=["src/features/notes/note.repository.ts"],
+            terms=wiki_tool.history_match_terms("src/features/notes/note.repository.ts"),
+            evidence="src/features/notes changed frequently",
+        )
+
+        self.assertFalse(wiki_tool.candidate_covers_task(self.repo, notes, shell_task))
+        self.assertTrue(wiki_tool.candidate_covers_task(self.repo, notes, notes_task))
 
     def test_status_reports_ready_when_concepts_exist(self):
         wiki_tool.init_wiki(self.repo)

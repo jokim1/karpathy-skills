@@ -151,6 +151,36 @@ Example: a default that licenses deleting legacy code anywhere vs. principle 3's
 skill's own workflow is about to activate the conflict — and resolve them by
 scoping the project default to the task, not by dropping it.
 
+## Lessons block maintenance (pipelane repos)
+
+Pipelane seeds a managed `## Lessons` block in CLAUDE.md (and the capture
+instruction in AGENTS.md) delimited by `<!-- pipelane:lessons:start -->` /
+`<!-- pipelane:lessons:end -->`, with an append-only entries region inside
+`<!-- pipelane:lessons:entries:start -->` / `:entries:end -->`. When the audited
+file carries a `pipelane:lessons` marker (or the repo otherwise uses pipelane),
+run these extra checks. Skip this section entirely for non-pipelane files.
+
+**Coverage (is the block there?):** If the repo uses pipelane but CLAUDE.md has
+no `pipelane:lessons:start` marker, or the marker exists but the capture
+instruction prose is gone, flag it and route the fix to `/pipelane setup` — that
+command owns and re-syncs the block. Do not hand-write the block yourself.
+
+**Quality (operate INSIDE `lessons:entries` only — never edit the
+pipelane-owned instruction prose):**
+
+- **Dedupe** near-identical lessons into one; keep the earliest date.
+- **Contradictions** — flag pairs that can't both hold ("always X" vs "never
+  X"); keep both dates and surface them, don't silently pick a winner.
+- **Stale references** — drop a lesson whose referenced file or symbol no longer
+  exists in the repo (verify the absence first).
+- **Anti-bloat** — if the entries region exceeds ~40 lines, recommend lifting
+  the older or narrowly-conditional lessons into a dedicated skill or doc and
+  leaving only the broadly-applicable ones inline.
+
+Pruning entries is the one case where this skill edits a managed region: still
+report-first, apply on approval, and preserve the markers plus every remaining
+entry verbatim.
+
 ## Report format
 
 **Consolidate.** Group repeated instances of one problem into a single finding

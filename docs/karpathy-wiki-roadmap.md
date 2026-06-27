@@ -70,6 +70,20 @@ Second dogfood finding:
 - The agent remains responsible for semantic content and citations. The helper
   should plan what to inspect, not pretend it understands the code by itself.
 
+Third dogfood finding:
+
+- Static repo shape is useful, but it does not always tell us which pages are
+  most worth creating first. Recent Git history adds a practical signal:
+  frequently changed directories, bug-fix commits, risky migrations/auth paths,
+  and test touchpoints usually identify concepts that will help future agents.
+- The first implementation keeps this behind `concept-plan --include-history`
+  so the existing default output stays stable. The helper now derives planning
+  tasks from Git history, scores deterministic candidates, and uses a small
+  weighted set-cover pass to prefer pages that explain multiple useful areas.
+- The remaining product question is whether those ranked pages actually improve
+  real task briefs and Q&A. That needs dogfood and benchmarks, not more planner
+  complexity yet.
+
 ### Benchmarking
 
 Add a wiki orientation benchmark.
@@ -193,5 +207,5 @@ show why the wiki is useful.
 
 Run `/karpathy:wiki` on one or two more real repos, capture the transcripts and
 outputs, and compare them against Rocketboard. The next validation target should
-exercise either update mode after a real code change or Q&A on a repo with a
-thin/stale wiki.
+exercise either history-aware starter planning on a thin wiki, update mode after
+a real code change, or Q&A on a repo with a stale wiki.

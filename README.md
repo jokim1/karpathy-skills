@@ -441,7 +441,10 @@ The starter concept planner is deliberately deterministic. It can detect
 high-value repo areas such as app boot, auth/session, routing/shell, domain
 data flows, integration servers, verification commands, and documented
 invariants, then return source files the agent should read before writing wiki
-pages. It does not generate semantic claims by itself.
+pages. It can also use recent Git history as an optional ranking signal when
+the best starter pages are not obvious, scoring candidates by coverage,
+churn/risk evidence, verification value, and repo structure. It does not
+generate semantic claims by itself.
 
 ### Why The Command Is Simple
 
