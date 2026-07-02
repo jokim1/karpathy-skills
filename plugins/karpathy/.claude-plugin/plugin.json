@@ -1,6 +1,6 @@
 {
   "name": "karpathy",
-  "description": "Operationalizes Andrej Karpathy's LLM-coding principles as Claude Code tools. /karpathy:audit reviews agent instruction files; /karpathy:diff reviews in-progress code changes before commit; /karpathy:wiki creates and maintains a local repo knowledge base for task briefs, Q&A, stale reminders, and wiki health checks. Reports first and applies fixes only on approval.",
+  "description": "Operationalizes Andrej Karpathy's LLM-coding principles as Claude Code tools. /karpathy:audit reviews agent instruction files and can include configured stale-doc/index checks; /karpathy:setup configures those audit checks; /karpathy:diff reviews in-progress code changes before commit; /karpathy:wiki creates and maintains a local repo knowledge base for task briefs, Q&A, stale reminders, and wiki health checks. Reports first and applies fixes only on approval.",
   "version": "1.2.0",
   "author": {
     "name": "Joseph Kim"

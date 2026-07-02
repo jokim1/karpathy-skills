@@ -8,9 +8,10 @@ description: >-
   contradiction-free (quality). Use this whenever the user wants to review,
   audit, critique, tighten, clean up, or improve a CLAUDE.md / AGENTS.md /
   .cursor/rules / agent memory file, says "karpathy audit" or "/karpathy:audit",
-  asks whether their agent instructions are any good, or wants to apply Karpathy
-  or vibe-coding guidelines to a project. Trigger even if they just say "check
-  my CLAUDE.md" without naming Karpathy.
+  asks to configure or set up Karpathy audit checks, asks whether their agent
+  instructions are any good, or wants to apply Karpathy or vibe-coding
+  guidelines to a project. Trigger even if they just say "check my CLAUDE.md"
+  without naming Karpathy.
 ---
 
 # Karpathy Audit
@@ -18,7 +19,7 @@ description: >-
 Audit an AI-agent instruction file (`CLAUDE.md`, `AGENTS.md`, `.cursor/rules/*.mdc`,
 or a global memory file) against Andrej Karpathy's four principles for LLM coding.
 
-The audit has two independent halves:
+The core instruction audit has two independent halves:
 
 - **Coverage** — does the file actually instruct the agent to follow the four
   principles?
@@ -29,6 +30,12 @@ The second half is the interesting one. An instruction file is itself something
 an LLM reads on every turn. The same failure modes Karpathy describes in
 generated code — bloat, vagueness, stale cruft — show up in the file just as
 easily. Audit it the way you would audit code.
+
+The audit can also include optional repo documentation checks when configured
+in `.karpathy.json`: stale-doc candidates and index quality for folders with
+many docs. These optional checks are off by default so existing `/karpathy:audit`
+behavior remains instruction-file focused until the user enables them through
+`/karpathy setup` or `/karpathy configure`.
 
 Default to **report first, apply on approval**. Never rewrite the file before
 the user has seen the findings and a concrete diff.
@@ -70,8 +77,9 @@ of project context deserves to exist. When in doubt, leave it and say so.
    exists, say so and offer to draft one — don't audit a file that isn't there.
 2. **Run the coverage audit** (below).
 3. **Run the quality audit** (below).
-4. **Write the report** in the format below. Then stop.
-5. **Apply on approval.** Only after the user approves, make the edits —
+4. **Run optional docs checks** only if `.karpathy.json` enables them.
+5. **Write the report** in the format below. Then stop.
+6. **Apply on approval.** Only after the user approves, make the edits —
    surgically. Preserve their headings, voice, and ordering; change only the
    lines the findings name; never reformat the whole file. (Yes — the skill
    itself follows principle 3.) Do not stage or commit the instruction file.
@@ -151,6 +159,94 @@ Example: a default that licenses deleting legacy code anywhere vs. principle 3's
 skill's own workflow is about to activate the conflict — and resolve them by
 scoping the project default to the task, not by dropping it.
 
+## Optional docs audit
+
+Optional docs checks are controlled by `.karpathy.json` at the repo root:
+
+```json
+{
+  "audit": {
+    "staleDocs": true,
+    "indexChecks": true,
+    "docPaths": ["README.md", "docs", "knowledge", "specs", "roadmap.md", "TODO.md"],
+    "indexThreshold": 5
+  }
+}
+```
+
+If the config file is absent, invalid, or both optional checks are false,
+preserve the old behavior: audit the target instruction file and mention that
+docs checks are skipped or not configured. Do not invent docs findings without
+an enabled config.
+
+When either optional check is enabled, run the helper internally:
+
+```bash
+python3 <skill-dir>/scripts/audit_tool.py docs-check --repo . --json
+```
+
+Do not ask the user to run this helper. Summarize its result in the audit
+report. Keep docs findings separate from instruction-file quality findings;
+they are repo documentation findings, not evidence that `CLAUDE.md` or
+`AGENTS.md` is bad.
+
+**Stale docs (`D1`)** flags stale-candidate evidence:
+
+- TODO/FIXME/TBD markers and temporal language such as "currently", "for now",
+  "current sprint", "in flight", or "this week".
+- Dated roadmap/plan claims older than the helper's threshold.
+- Broken local Markdown links in configured doc paths.
+
+Treat temporal-language findings as warnings unless you verify they are
+actively misleading. Broken local links can be critical because they make the
+doc untrustworthy for agents immediately.
+
+**Doc indexes (`D2`)** checks configured doc folders for navigation quality:
+
+- A folder with at least `indexThreshold` direct doc files should have
+  `README.md` or `index.md`.
+- Existing indexes should mention their direct child docs by filename or stem.
+- This is about high-signal navigation for agents. Do not require exhaustive
+  indexes for tiny folders.
+
+Recommended fixes should be concrete and small: remove or date-bound stale
+claims, repair broken links, add `docs/index.md`, or add missing entries to an
+existing index. Ask before semantic rewrites.
+
+## Audit setup / configure
+
+`/karpathy setup` and `/karpathy configure` are aliases for configuring the
+optional audit checks. Use the same helper internally:
+
+```bash
+python3 <skill-dir>/scripts/audit_tool.py setup --repo .
+python3 <skill-dir>/scripts/audit_tool.py setup --repo . --toggle D1
+python3 <skill-dir>/scripts/audit_tool.py setup --repo . --enable stale-docs
+python3 <skill-dir>/scripts/audit_tool.py setup --repo . --disable doc-indexes
+python3 <skill-dir>/scripts/audit_tool.py setup --repo . --yes
+python3 <skill-dir>/scripts/audit_tool.py setup --repo . --reset
+```
+
+Follow the Pipelane review setup shape:
+
+- Bare setup/configure is read-only. It prints grouped rows and controls, but
+  writes no files.
+- Always show the always-on instruction rows (`A1`, `A2`) and the mutable docs
+  rows (`D1`, `D2`).
+- Let the user toggle by row ID (`D1`, `D2`) or check ID (`stale-docs`,
+  `doc-indexes`).
+- `--yes` saves the recommended optional docs checks: stale docs on and doc
+  indexes on.
+- `--reset` restores instruction-only defaults.
+- Writes are limited to `.karpathy.json`. Never stage or commit it
+  automatically.
+- After a mutation, reprint the grouped setup state plus a short "Setup
+  actions" list.
+
+If a client rejects `/karpathy setup` or `/karpathy configure` as slash-command
+syntax, tell the user to use `/karpathy:setup`, `/karpathy:configure`, or type
+`karpathy setup` / `karpathy configure` as plain text.
+
 ## Lessons block maintenance (pipelane repos)
 
 Pipelane seeds a managed `## Lessons` block in CLAUDE.md (and the capture
@@ -212,6 +308,10 @@ Use this structure exactly:
 - **Fix:** <specific change>
 
 (repeat per finding; order Critical -> Warning -> Nit)
+
+## Optional docs checks
+<Only include when configured or explicitly skipped. Show enabled checks,
+config path, findings grouped Critical -> Warning, and small proposed fixes.>
 
 ## What's good
 <1-3 things the file does well — be specific. Don't skip this; an audit

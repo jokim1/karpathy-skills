@@ -7,12 +7,15 @@ The goal is simple: when an AI agent writes code for you, these skills help you
 catch the common failure modes before they turn into bugs, bloated code, or
 messy commits.
 
-This repo ships one plugin, `karpathy`, with three skills:
+This repo ships one plugin, `karpathy`, with three core skills plus setup
+commands:
 
 - `/karpathy:audit` - reviews your AI agent instruction files.
 - `/karpathy:diff` - reviews AI-generated code changes before you commit.
 - `/karpathy:wiki` - a repo wiki / memory layer for helping agents understand
   the codebase before they edit it.
+- `/karpathy:setup` / `/karpathy:configure` - configures optional audit checks
+  for stale docs and missing doc indexes.
 
 The wiki skill's product rationale and longer-term design are documented in
 [docs/repo-knowledge-bases.html](docs/repo-knowledge-bases.html).
@@ -50,6 +53,7 @@ The four principles behind the plugin are:
 | `/karpathy:audit` | Shipped | A review of your `CLAUDE.md`, `AGENTS.md`, or Cursor rules. | Making sure your agent instructions are clear, current, and useful. | Better standing instructions, fewer vague rules, less stale context. |
 | `/karpathy:diff` | Shipped | A review of the code changes an AI agent just made. | Catching scope creep before you commit. | Smaller diffs, fewer surprise edits, safer commits. |
 | `/karpathy:wiki` | Shipped MVP | A local repo wiki that the agent maintains and reads before coding. | Helping the agent understand your project without rereading everything every time. | Faster orientation, better task briefs, less repeated context work. |
+| `/karpathy:setup` / `/karpathy:configure` | Shipped | A Pipelane-style checklist for optional audit checks. | Turning stale-doc and doc-index checks on/off. | Audits can cover roadmap/spec/todo rot and missing indexes when you choose. |
 
 If you only remember one thing:
 
@@ -135,6 +139,8 @@ export KARPATHY_DISABLE_UPDATE_CHECK=1
 /karpathy:audit [path]
 /karpathy:diff [ref/path]
 /karpathy:wiki [question/task/doctor]
+/karpathy:setup [D1/D2 | --enable stale-docs | --disable doc-indexes]
+/karpathy:configure [same options as setup]
 ```
 
 You can also ask in normal words:
@@ -144,6 +150,8 @@ audit my AGENTS.md
 review my changes before I commit
 did the agent touch anything it should not have?
 karpathy wiki how does auth work?
+karpathy setup
+karpathy configure --yes
 ```
 
 Claude Code command form:
@@ -152,6 +160,8 @@ Claude Code command form:
 /karpathy:audit
 /karpathy:diff
 /karpathy:wiki
+/karpathy:setup
+/karpathy:configure
 ```
 
 Human-friendly phrasing that should also trigger the skills:
@@ -160,11 +170,13 @@ Human-friendly phrasing that should also trigger the skills:
 karpathy audit
 karpathy diff
 karpathy wiki
+karpathy setup
+karpathy configure
 ```
 
-Some clients may reject `/karpathy wiki` as a slash command because plugin
-commands are namespaced with a colon. If that happens, use `/karpathy:wiki` or
-type `karpathy wiki` as normal text.
+Some clients may reject `/karpathy wiki` or `/karpathy setup` as slash commands
+because plugin commands are namespaced with a colon. If that happens, use
+`/karpathy:wiki`, `/karpathy:setup`, or type the phrase as normal text.
 
 ---
 
@@ -181,6 +193,15 @@ type `karpathy wiki` as normal text.
 
 These files matter because the agent reads them repeatedly. If they are bloated,
 stale, vague, or contradictory, the agent will behave worse.
+
+By default, audit stays focused on those always-read instruction files. You can
+also enable optional repo-doc checks with `/karpathy:setup` or
+`/karpathy:configure`:
+
+- `D1 stale-docs` scans configured docs for TODOs, temporal claims, stale dated
+  planning notes, and broken local doc links.
+- `D2 doc-indexes` checks folders with many docs for a usable `README.md` or
+  `index.md` and direct child doc listings.
 
 ### When To Use It
 
@@ -216,6 +237,10 @@ agent starts misbehaving is usually enough.
    - Coverage: does the file teach the agent the four principles?
    - Quality: is the file itself clear, current, and useful?
 
+   If optional docs checks are enabled in `.karpathy.json`, it also reports a
+   separate docs-check section. These findings stay separate from instruction
+   file findings.
+
 4. It gives findings like:
 
    ```text
@@ -244,11 +269,15 @@ whether those changes belong in git.
 | Vague rules like "handle errors properly" | Forces the agent to guess. |
 | Missing test or build commands | Makes it hard for the agent to know when it is done. |
 | Contradictory instructions | Guarantees inconsistent behavior. |
+| Optional stale docs checks | Finds roadmap/spec/todo claims that may mislead future agents. |
+| Optional index checks | Finds doc folders that make agents search instead of navigating. |
 
 ### Example Use
 
 ```text
 /karpathy:audit AGENTS.md
+/karpathy:setup --yes
+/karpathy:setup D1
 ```
 
 Possible result:
@@ -759,7 +788,9 @@ karpathy-skills/
         |   `-- plugin.json       # Claude Code plugin manifest
         |-- commands/
         |   |-- audit.md          # /karpathy:audit command
+        |   |-- configure.md      # /karpathy:configure command
         |   |-- diff.md           # /karpathy:diff command
+        |   |-- setup.md          # /karpathy:setup command
         |   `-- wiki.md           # /karpathy:wiki command
         |-- hooks/
         |   `-- hooks.json        # advisory update-check hook
@@ -767,7 +798,9 @@ karpathy-skills/
         |   `-- check_update.py   # shared update checker
         `-- skills/
             |-- karpathy-audit/
-            |   `-- SKILL.md
+            |   |-- SKILL.md
+            |   `-- scripts/
+            |       `-- audit_tool.py
             |-- karpathy-diff/
             |   `-- SKILL.md
             `-- karpathy-wiki/

@@ -1,7 +1,7 @@
 {
   "name": "karpathy",
   "version": "1.2.0",
-  "description": "Operationalizes Andrej Karpathy's LLM-coding principles as coding-agent skills. Audit agent instruction files, review code diffs before commit, and maintain a local repo wiki for task briefs, Q&A, stale reminders, and wiki health checks.",
+  "description": "Operationalizes Andrej Karpathy's LLM-coding principles as coding-agent skills. Audit agent instruction files, optionally include configured stale-doc/index checks, review code diffs before commit, and maintain a local repo wiki for task briefs, Q&A, stale reminders, and wiki health checks.",
   "author": {
     "name": "Joseph Kim",
     "url": "https://github.com/jokim1"
@@ -24,7 +24,7 @@
   "interface": {
     "displayName": "Karpathy",
     "shortDescription": "Audit instructions, review diffs, and maintain a repo wiki.",
-    "longDescription": "Use Karpathy to audit CLAUDE.md, AGENTS.md, and other agent instruction files, review code changes for scope creep and missing verification, and maintain a local Markdown repo wiki for task briefs, Q&A, stale reminders, and wiki health checks. The plugin reports first and applies fixes only after approval.",
+    "longDescription": "Use Karpathy to audit CLAUDE.md, AGENTS.md, and other agent instruction files, configure optional stale-doc and doc-index audit checks, review code changes for scope creep and missing verification, and maintain a local Markdown repo wiki for task briefs, Q&A, stale reminders, and wiki health checks. The plugin reports first and applies fixes only after approval.",
     "developerName": "Joseph Kim",
     "category": "Productivity",
     "capabilities": [
@@ -35,6 +35,7 @@
     "defaultPrompt": [
       "Review my changes before I commit.",
       "Audit this AGENTS.md for agent guidance.",
+      "Configure Karpathy audit docs checks.",
       "Set up a repo wiki for this project.",
       "Use the repo wiki to brief this task."
     ],
