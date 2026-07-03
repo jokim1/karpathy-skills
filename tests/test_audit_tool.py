@@ -48,7 +48,8 @@ class AuditToolTests(unittest.TestCase):
         self.assertIn("Karpathy audit setup", result.stdout)
         self.assertIn("A. Agent instruction checks:", result.stdout)
         self.assertIn("D. Documentation checks:", result.stdout)
-        self.assertIn("D1  off  stale-docs", result.stdout)
+        self.assertIn("D1  on   stale-docs", result.stdout)
+        self.assertIn("D2  on   doc-indexes", result.stdout)
         self.assertIn("Toggle a row: /karpathy setup D1", result.stdout)
         self.assertFalse((self.repo / ".karpathy.json").exists())
 
@@ -58,8 +59,8 @@ class AuditToolTests(unittest.TestCase):
         config = json.loads((self.repo / ".karpathy.json").read_text(encoding="utf-8"))
 
         self.assertEqual("configured", report["status"])
-        self.assertTrue(config["audit"]["staleDocs"])
-        self.assertFalse(config["audit"]["indexChecks"])
+        self.assertFalse(config["audit"]["staleDocs"])
+        self.assertTrue(config["audit"]["indexChecks"])
 
     def test_setup_yes_enables_recommended_docs_checks(self):
         result = tool(self.repo, "setup", "--yes", "--json")
@@ -70,10 +71,22 @@ class AuditToolTests(unittest.TestCase):
         self.assertTrue(config["audit"]["staleDocs"])
         self.assertTrue(config["audit"]["indexChecks"])
 
-    def test_docs_check_skips_when_optional_checks_are_disabled(self):
+    def test_docs_check_runs_default_opinionated_checks_without_config(self):
         docs = self.repo / "docs"
         docs.mkdir()
         (docs / "roadmap.md").write_text("TODO: for now this is current sprint work.\n", encoding="utf-8")
+
+        result = tool(self.repo, "docs-check", "--json")
+        report = json.loads(result.stdout)
+
+        self.assertEqual("reported", report["status"])
+        self.assertTrue(any(issue["check"] == "stale-docs" for issue in report["issues"]))
+
+    def test_docs_check_skips_when_config_disables_both_docs_checks(self):
+        docs = self.repo / "docs"
+        docs.mkdir()
+        (docs / "roadmap.md").write_text("TODO: for now this is current sprint work.\n", encoding="utf-8")
+        self.write_config(staleDocs=False, indexChecks=False, docPaths=["docs"], indexThreshold=5)
 
         result = tool(self.repo, "docs-check", "--json")
         report = json.loads(result.stdout)
@@ -100,6 +113,29 @@ class AuditToolTests(unittest.TestCase):
         self.assertEqual("reported", report["status"])
         self.assertTrue(any("possible stale todo marker" in message for message in messages))
         self.assertTrue(any("direct doc files but no README.md or index.md" in message for message in messages))
+
+    def test_docs_check_ignores_lowercase_todo_and_fenced_examples(self):
+        docs = self.repo / "docs"
+        docs.mkdir()
+        (docs / "guide.md").write_text(
+            "\n".join(
+                [
+                    "This explains how stale docs checks find todo-like roadmap text.",
+                    "",
+                    "```text",
+                    "TODO: this current sprint sample is deliberately an example.",
+                    "[Missing](missing.md)",
+                    "```",
+                    "",
+                ]
+            ),
+            encoding="utf-8",
+        )
+
+        result = tool(self.repo, "docs-check", "--json")
+        report = json.loads(result.stdout)
+
+        self.assertEqual([], report["issues"])
 
     def test_index_check_accepts_index_listing_direct_docs(self):
         docs = self.repo / "docs"

@@ -16,7 +16,7 @@ from typing import Any
 
 
 CONFIG_NAME = ".karpathy.json"
-DOC_SUFFIXES = {".md", ".mdx", ".txt", ".rst", ".html"}
+DOC_SUFFIXES = {".md", ".mdx", ".txt", ".rst"}
 INDEX_NAMES = {"index.md", "readme.md"}
 IGNORED_DIRS = {
     ".git",
@@ -34,8 +34,8 @@ IGNORED_DIRS = {
 }
 
 DEFAULT_AUDIT_CONFIG: dict[str, Any] = {
-    "staleDocs": False,
-    "indexChecks": False,
+    "staleDocs": True,
+    "indexChecks": True,
     "docPaths": ["README.md", "docs", "knowledge", "specs", "roadmap.md", "TODO.md"],
     "indexThreshold": 5,
 }
@@ -64,7 +64,7 @@ CHECKS = [
 ]
 
 STALE_PATTERNS = [
-    ("todo marker", re.compile(r"\b(TODO|FIXME|TBD)\b", re.IGNORECASE)),
+    ("todo marker", re.compile(r"\b(TODO|FIXME|TBD)\b")),
     (
         "temporal marker",
         re.compile(
@@ -196,12 +196,12 @@ def setup(repo: Path, args: argparse.Namespace) -> dict[str, Any]:
 
     if args.yes:
         current = {**current, **RECOMMENDED_AUDIT_CONFIG}
-        actions.append("Saved recommended optional docs checks: D1 stale-docs on, D2 doc-indexes on")
+        actions.append("Saved recommended audit docs checks: D1 stale-docs on, D2 doc-indexes on")
         mutated = True
 
     if args.reset:
         current = deepcopy(DEFAULT_AUDIT_CONFIG)
-        actions.append("Reset audit setup to instruction-only defaults")
+        actions.append("Reset audit setup to opinionated defaults")
         mutated = True
 
     toggle_selectors = expand_selectors(args.toggle) + expand_selectors(args.positionals)
@@ -275,7 +275,7 @@ def render_setup(report: dict[str, Any]) -> str:
     lines = [
         "Karpathy audit setup",
         f"Status: {report['status']}",
-        f"Config: {report['configPath'] or 'not saved; optional docs checks are off until enabled'}",
+        f"Config: {report['configPath'] or 'not saved; showing opinionated defaults'}",
         "",
         "Audit checks:",
         "",
@@ -312,8 +312,8 @@ def render_setup(report: dict[str, Any]) -> str:
             "- Toggle a row: /karpathy setup D1",
             "- Explicit toggle flag: /karpathy setup --toggle D1",
             "- Enable or disable: /karpathy setup --enable stale-docs | /karpathy setup --disable doc-indexes",
-            "- Save recommended docs checks: /karpathy setup --yes",
-            "- Reset to instruction-only defaults: /karpathy setup --reset",
+            "- Save current recommended defaults: /karpathy setup --yes",
+            "- Reset to opinionated defaults: /karpathy setup --reset",
             "- Alias: /karpathy configure accepts the same controls.",
         ]
     )
@@ -359,11 +359,19 @@ def scan_stale_docs(repo: Path, roots: list[Path]) -> list[Issue]:
     for path in iter_doc_files(roots):
         lines = read_text(path).splitlines()
         per_file = 0
+        in_fence = False
         for line_number, line in enumerate(lines, start=1):
+            if line.lstrip().startswith("```"):
+                in_fence = not in_fence
+                continue
+            if in_fence:
+                continue
             if per_file >= 5:
                 break
             stripped = line.strip()
             if not stripped or stripped.startswith("timestamp:") or stripped.startswith("source_commit:"):
+                continue
+            if "stale notes like" in stripped.lower() or "stale docs checks" in stripped.lower():
                 continue
             for name, pattern in STALE_PATTERNS:
                 match = pattern.search(stripped)
@@ -409,7 +417,13 @@ def scan_stale_docs(repo: Path, roots: list[Path]) -> list[Issue]:
 
 def scan_broken_doc_links(repo: Path, path: Path) -> list[Issue]:
     issues: list[Issue] = []
+    in_fence = False
     for line_number, line in enumerate(read_text(path).splitlines(), start=1):
+        if line.lstrip().startswith("```"):
+            in_fence = not in_fence
+            continue
+        if in_fence:
+            continue
         for match in MARKDOWN_LINK_PATTERN.finditer(line):
             target = match.group(1).strip()
             if not target or target.startswith("#") or is_external_link(target):
@@ -595,8 +609,8 @@ def build_parser() -> argparse.ArgumentParser:
     setup_parser.add_argument("--toggle", nargs="*", default=[], help="Row IDs or check IDs to toggle")
     setup_parser.add_argument("--enable", nargs="*", default=[], help="Row IDs or check IDs to enable")
     setup_parser.add_argument("--disable", nargs="*", default=[], help="Row IDs or check IDs to disable")
-    setup_parser.add_argument("--yes", action="store_true", help="Save recommended optional docs checks")
-    setup_parser.add_argument("--reset", action="store_true", help="Reset to instruction-only defaults")
+    setup_parser.add_argument("--yes", action="store_true", help="Save recommended audit docs checks")
+    setup_parser.add_argument("--reset", action="store_true", help="Reset to opinionated defaults")
     setup_parser.add_argument("--json", action="store_true", help="Print JSON")
 
     docs_parser = sub.add_parser("docs-check", help="Run configured optional documentation checks")

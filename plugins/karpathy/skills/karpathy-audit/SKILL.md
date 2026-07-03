@@ -31,11 +31,10 @@ an LLM reads on every turn. The same failure modes Karpathy describes in
 generated code — bloat, vagueness, stale cruft — show up in the file just as
 easily. Audit it the way you would audit code.
 
-The audit can also include optional repo documentation checks when configured
-in `.karpathy.json`: stale-doc candidates and index quality for folders with
-many docs. These optional checks are off by default so existing `/karpathy:audit`
-behavior remains instruction-file focused until the user enables them through
-`/karpathy setup` or `/karpathy configure`.
+The audit also includes repo documentation checks by default: stale-doc
+candidates and index quality for folders with many docs. Stale roadmaps, specs,
+TODOs, and missing indexes are hidden repo state that misleads agents. Users can
+opt out through `/karpathy setup` or `/karpathy configure`.
 
 Default to **report first, apply on approval**. Never rewrite the file before
 the user has seen the findings and a concrete diff.
@@ -77,7 +76,7 @@ of project context deserves to exist. When in doubt, leave it and say so.
    exists, say so and offer to draft one — don't audit a file that isn't there.
 2. **Run the coverage audit** (below).
 3. **Run the quality audit** (below).
-4. **Run optional docs checks** only if `.karpathy.json` enables them.
+4. **Run docs checks** unless `.karpathy.json` disables them.
 5. **Write the report** in the format below. Then stop.
 6. **Apply on approval.** Only after the user approves, make the edits —
    surgically. Preserve their headings, voice, and ordering; change only the
@@ -159,9 +158,9 @@ Example: a default that licenses deleting legacy code anywhere vs. principle 3's
 skill's own workflow is about to activate the conflict — and resolve them by
 scoping the project default to the task, not by dropping it.
 
-## Optional docs audit
+## Docs audit
 
-Optional docs checks are controlled by `.karpathy.json` at the repo root:
+Docs checks are controlled by `.karpathy.json` at the repo root:
 
 ```json
 {
@@ -174,12 +173,13 @@ Optional docs checks are controlled by `.karpathy.json` at the repo root:
 }
 ```
 
-If the config file is absent, invalid, or both optional checks are false,
-preserve the old behavior: audit the target instruction file and mention that
-docs checks are skipped or not configured. Do not invent docs findings without
-an enabled config.
+If the config file is absent, use the opinionated defaults: D1 and D2 on, with
+the default docs scope and index threshold shown above. If both checks are false
+because the user opted out, audit the target instruction file and mention that
+docs checks are disabled. If the config is invalid, report the config error and
+do not invent docs findings.
 
-When either optional check is enabled, run the helper internally:
+When either docs check is enabled, run the helper internally:
 
 ```bash
 python3 <skill-dir>/scripts/audit_tool.py docs-check --repo . --json
@@ -216,7 +216,7 @@ existing index. Ask before semantic rewrites.
 ## Audit setup / configure
 
 `/karpathy setup` and `/karpathy configure` are aliases for configuring the
-optional audit checks. Use the same helper internally:
+audit docs checks. Use the same helper internally:
 
 ```bash
 python3 <skill-dir>/scripts/audit_tool.py setup --repo .
@@ -235,9 +235,9 @@ Follow the Pipelane review setup shape:
   rows (`D1`, `D2`).
 - Let the user toggle by row ID (`D1`, `D2`) or check ID (`stale-docs`,
   `doc-indexes`).
-- `--yes` saves the recommended optional docs checks: stale docs on and doc
+- `--yes` saves the recommended docs checks: stale docs on and doc
   indexes on.
-- `--reset` restores instruction-only defaults.
+- `--reset` restores opinionated defaults: stale docs on and doc indexes on.
 - Writes are limited to `.karpathy.json`. Never stage or commit it
   automatically.
 - After a mutation, reprint the grouped setup state plus a short "Setup

@@ -8,8 +8,8 @@
     {
       "name": "karpathy",
       "source": "./plugins/karpathy",
-      "description": "Operationalizes Andrej Karpathy's LLM-coding principles. /karpathy:audit reviews agent instruction files; /karpathy:diff reviews in-progress code changes before commit; /karpathy:wiki creates and maintains a local repo knowledge base for task briefs, Q&A, stale reminders, and wiki health checks. Includes an advisory update checker for Claude Code and Codex installs.",
-      "version": "1.2.0",
+      "description": "Operationalizes Andrej Karpathy's LLM-coding principles. /karpathy:audit reviews agent instruction files; /karpathy:diff reviews in-progress code changes before commit; /karpathy:wiki creates and maintains a local repo knowledge base; /karpathy:update checks for and applies plugin updates.",
+      "version": "1.3.0",
       "author": {
         "name": "Joseph Kim"
       },

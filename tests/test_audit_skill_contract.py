@@ -12,12 +12,13 @@ class AuditSkillContractTests(unittest.TestCase):
     def test_skill_defines_optional_docs_checks_as_configured_behavior(self):
         text = SKILL.read_text(encoding="utf-8")
 
-        self.assertIn("## Optional docs audit", text)
+        self.assertIn("## Docs audit", text)
         self.assertIn(".karpathy.json", text)
         self.assertIn('"staleDocs": true', text)
         self.assertIn('"indexChecks": true', text)
         self.assertIn("If the config file is absent", text)
-        self.assertIn("preserve the old behavior", text)
+        self.assertIn("use the opinionated defaults", text)
+        self.assertIn("D1 and D2 on", text)
         self.assertIn("docs-check --repo . --json", text)
 
     def test_skill_defines_pipelane_style_setup_controls(self):
