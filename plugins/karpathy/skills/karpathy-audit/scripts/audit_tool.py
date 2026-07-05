@@ -41,7 +41,6 @@ DEFAULT_AUDIT_CONFIG: dict[str, Any] = {
 }
 
 RECOMMENDED_AUDIT_CONFIG: dict[str, Any] = {
-    **DEFAULT_AUDIT_CONFIG,
     "staleDocs": True,
     "indexChecks": True,
 }

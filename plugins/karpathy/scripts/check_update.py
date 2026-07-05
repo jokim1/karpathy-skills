@@ -29,6 +29,7 @@ DEFAULT_CHECK_URL = (
     "plugins/karpathy/.claude-plugin/plugin.json"
 )
 DEFAULT_INTERVAL_SECONDS = 24 * 60 * 60
+DEFAULT_UPDATE_COMMAND_TIMEOUT_SECONDS = 120.0
 SEMVER_RE = re.compile(r"^(\d+)\.(\d+)\.(\d+)")
 
 
@@ -290,6 +291,17 @@ def read_interval_seconds() -> int:
         return DEFAULT_INTERVAL_SECONDS
 
 
+def read_update_command_timeout_seconds() -> float:
+    raw = os.environ.get("KARPATHY_UPDATE_COMMAND_TIMEOUT_SECONDS")
+    if raw is None:
+        return DEFAULT_UPDATE_COMMAND_TIMEOUT_SECONDS
+    try:
+        timeout = float(raw)
+    except ValueError:
+        return DEFAULT_UPDATE_COMMAND_TIMEOUT_SECONDS
+    return timeout if timeout > 0 else DEFAULT_UPDATE_COMMAND_TIMEOUT_SECONDS
+
+
 def fetch_latest_version() -> str | None:
     url = os.environ.get("KARPATHY_UPDATE_CHECK_URL", DEFAULT_CHECK_URL)
     request = urllib.request.Request(
@@ -328,6 +340,18 @@ def codex_update_commands() -> list[str]:
     ]
 
 
+def format_seconds(seconds: float) -> str:
+    return f"{seconds:g}"
+
+
+def timeout_output(value: Any) -> str:
+    if value is None:
+        return ""
+    if isinstance(value, bytes):
+        return value.decode("utf-8", errors="replace").strip()
+    return str(value).strip()
+
+
 def run_codex_update() -> dict[str, Any]:
     codex = shutil.which("codex")
     if not codex:
@@ -342,11 +366,34 @@ def run_codex_update() -> dict[str, Any]:
         [codex, "plugin", "add", PLUGIN_SELECTOR],
     ]
     command_results = []
+    timeout = read_update_command_timeout_seconds()
     for command in commands:
-        completed = subprocess.run(command, text=True, capture_output=True, check=False)
+        command_label = " ".join(command)
+        try:
+            completed = subprocess.run(
+                command,
+                text=True,
+                capture_output=True,
+                check=False,
+                timeout=timeout,
+            )
+        except subprocess.TimeoutExpired as exc:
+            command_results.append(
+                {
+                    "command": command_label,
+                    "returncode": None,
+                    "stdout": timeout_output(exc.stdout),
+                    "stderr": timeout_output(exc.stderr),
+                }
+            )
+            return {
+                "action": "manual_required",
+                "commands": command_results,
+                "error": f"{command_label} timed out after {format_seconds(timeout)} seconds.",
+            }
         command_results.append(
             {
-                "command": " ".join(command),
+                "command": command_label,
                 "returncode": completed.returncode,
                 "stdout": completed.stdout.strip(),
                 "stderr": completed.stderr.strip(),
@@ -433,6 +480,7 @@ Usage:
 Environment:
   KARPATHY_DISABLE_UPDATE_CHECK=1 disables hook reminders.
   KARPATHY_UPDATE_DRY_RUN=1 prints the Codex update commands without running them.
+  KARPATHY_UPDATE_COMMAND_TIMEOUT_SECONDS overrides the Codex command timeout.
 """
     )
 

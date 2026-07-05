@@ -102,6 +102,34 @@ class UpdateToolTests(unittest.TestCase):
             payload["commands"],
         )
 
+    def test_manual_update_in_codex_times_out_to_manual_fallback(self):
+        bin_dir = self.root / "bin"
+        bin_dir.mkdir()
+        codex = bin_dir / "codex"
+        codex.write_text("#!/bin/sh\nsleep 2\n", encoding="utf-8")
+        codex.chmod(0o755)
+
+        result = self.run_tool(
+            "--update",
+            "--json",
+            CODEX_SHELL="1",
+            KARPATHY_UPDATE_COMMAND_TIMEOUT_SECONDS="0.05",
+            PATH=f"{bin_dir}{os.pathsep}{os.environ.get('PATH', '')}",
+        )
+        payload = json.loads(result.stdout)
+
+        self.assertEqual(1, result.returncode)
+        self.assertEqual("manual_required", payload["action"])
+        self.assertIn("timed out after 0.05 seconds", payload["error"])
+        self.assertEqual(1, len(payload["commands"]))
+        self.assertIsNone(payload["commands"][0]["returncode"])
+        self.assertTrue(
+            any(
+                "codex plugin marketplace upgrade karpathy-skills" in item
+                for item in payload["instructions"]
+            )
+        )
+
 
 if __name__ == "__main__":
     unittest.main()

@@ -71,6 +71,24 @@ class AuditToolTests(unittest.TestCase):
         self.assertTrue(config["audit"]["staleDocs"])
         self.assertTrue(config["audit"]["indexChecks"])
 
+    def test_setup_yes_preserves_custom_docs_scope(self):
+        self.write_config(
+            staleDocs=False,
+            indexChecks=False,
+            docPaths=["custom-docs"],
+            indexThreshold=9,
+        )
+
+        result = tool(self.repo, "setup", "--yes", "--json")
+        report = json.loads(result.stdout)
+        config = json.loads((self.repo / ".karpathy.json").read_text(encoding="utf-8"))
+
+        self.assertEqual("configured", report["status"])
+        self.assertTrue(config["audit"]["staleDocs"])
+        self.assertTrue(config["audit"]["indexChecks"])
+        self.assertEqual(["custom-docs"], config["audit"]["docPaths"])
+        self.assertEqual(9, config["audit"]["indexThreshold"])
+
     def test_docs_check_runs_default_opinionated_checks_without_config(self):
         docs = self.repo / "docs"
         docs.mkdir()
