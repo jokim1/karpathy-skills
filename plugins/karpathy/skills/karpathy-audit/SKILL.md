@@ -43,6 +43,9 @@ Never stage or commit `CLAUDE.md`, `AGENTS.md`, `.cursor/rules`, or other
 agent instruction / memory files. You may propose changes, and you may edit
 them after explicit approval, but the user decides whether those changes belong
 in git.
+If the instruction file is ignored by Git, treat it as checkout-local: audit it
+when the user explicitly asks, but do not prompt the user to add, stage, or
+commit it.
 
 ## Scope: what is NOT a defect
 

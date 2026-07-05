@@ -44,6 +44,9 @@ source code.
 - Always ask before installing Git hooks or editing agent instruction files.
 - Never stage or commit `CLAUDE.md`, `AGENTS.md`, `.cursor/rules`, or other
   agent instruction / memory files.
+- If an agent instruction file is ignored by Git, treat it as checkout-local:
+  mention it only when directly relevant, and do not prompt the user to add,
+  stage, or commit it.
 - Never copy large source files into the wiki. Summarize and cite them.
 
 Resolve bundled resources relative to this `SKILL.md`. Use
