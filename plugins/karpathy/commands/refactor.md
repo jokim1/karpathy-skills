@@ -9,7 +9,8 @@ Scope: $ARGUMENTS
 
 If the scope above is empty, infer a narrow scope from the request and state
 it. Route intent from the user's phrasing per the skill: analyze-shaped →
-report run (zero edits); act-shaped → autonomous run; ambiguous → report run.
+report run (no code edits; the ledger is its only write); act-shaped →
+autonomous run; ambiguous → report run.
 
 Follow the karpathy-refactor skill's workflow exactly: gather history
 evidence, record the verification baseline before any edit, sort candidates
