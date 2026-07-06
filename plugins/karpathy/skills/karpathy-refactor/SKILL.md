@@ -119,8 +119,10 @@ The scoring rules in workflow step 8 sort every candidate mechanically:
 - **Auto-apply lane** — applied without asking: behavior-preserving;
   verifiability strong, or partial with a test-first prelude inside the same
   slice; risk low or medium; blast radius local or subsystem; payoff named;
-  green baseline available. Hot-path slices qualify only when a benchmark is
-  runnable as part of verification.
+  baseline green — or red with the target covered by the slice's
+  characterization tests (the red-baseline downgrade's test-first path;
+  verification reproduces the recorded baseline). Hot-path slices qualify
+  only when a benchmark is runnable as part of verification.
 - **Report lane** — never applied autonomously; lands in the terminal report
   with its lane reason: weak verifiability without a test-first path, high
   risk, cross-cutting blast radius (escalate), behavior-changing, framework
@@ -162,6 +164,10 @@ report lane regardless of scores.
 ## Workflow
 
 ### 1. Establish scope
+
+First, in both modes: list this repo's scratch convention directory (see
+Snapshot Mechanics) and disclose stale state from an interrupted run in the
+first markers.
 
 If the user names a path, use it. If not, infer a narrow scope and say what
 scope is being reviewed; ask only when the scope cannot be inferred without a
@@ -311,9 +317,10 @@ apply ten candidates is slipping into generic cleanup.
 Autonomous runs only. For each auto-apply-lane candidate, in ladder order:
 
 1. Append the contract — candidate id, invariant, verification commands,
-   recorded baseline — to the scratch contract file. Long apply sessions
-   drift; the contract is the fixed reference, written before the first
-   edit.
+   recorded baseline — to the contract file in the run's scratch directory
+   (the pinned convention in Snapshot Mechanics, not a harness scratchpad).
+   Long apply sessions drift; the contract is the fixed reference, written
+   before the first edit.
 2. Emit `[refactor] Applying Rn (<type>): <one-line>`.
 3. Snapshot the worktree (see Snapshot Mechanics).
 4. Apply only the named candidate, running the test-first prelude first when
@@ -323,13 +330,15 @@ Autonomous runs only. For each auto-apply-lane candidate, in ladder order:
    surface must reproduce the recorded baseline, and tests added by the
    slice must pass. Benchmarks count as verification on hot paths. When the
    repo supports test targeting, scoped tests may verify each rung with the
-   full baseline surface rerun once after the last rung; flake reruns double
-   worst-case suite time — say so in the report when it bites.
+   full baseline surface rerun once after the last rung — if that deferred
+   rerun fails, restore rungs newest-first until the full surface reproduces
+   the recorded baseline; flake reruns double worst-case suite time — say so
+   in the report when it bites.
 6. Pass → `[refactor] Verified Rn`; continue. Fail → rerun once to detect
    flake; persistent failure → restore the snapshot, emit
    `[refactor] Reverted Rn`, stop dependent rungs (independent candidates
    may continue). A fail-then-pass rerun marks the suite unstable: cap
-   verifiability at partial for remaining rungs and say so.
+   remaining rungs at partial, move them to the report lane, and say so.
 7. After the last rung: trace review of the full applied diff against the
    contract file, reusing karpathy-diff's trace-test categories — traces /
    doesn't trace / can't tell — with the contract as the task. In this loop
@@ -363,10 +372,12 @@ these mechanics:
 - **Scratch state** (contract file, snapshots, untracked-file lists) lives
   in one run-scoped scratch directory outside the repo, at the fixed
   convention `<system temp>/karpathy-refactor/<repo dir name>/<run id>/`.
-  At start, list that repo's convention directory: stale scratch state from
-  an interrupted run is disclosed in the first markers before doing
-  anything else, and a half-applied slice in the worktree is matched
-  against its recorded snapshot — never silently treated as user edits.
+  Each run records the repo's absolute path in its scratch metadata. At
+  start (workflow step 1), list that repo's convention directory: stale
+  scratch state from an interrupted run is disclosed in the first markers
+  before doing anything else, and a half-applied slice in the worktree is
+  matched against its recorded snapshot — never silently treated as user
+  edits. Ignore, and say so, entries recorded for a different checkout.
 - **Scope of the guarantee:** it covers the worktree. Verification commands
   with external side effects (databases, caches, snapshot-test auto-updates,
   local services) are outside it — flag side-effectful suites in the report.
@@ -378,7 +389,7 @@ these mechanics:
 Every run writes the ledger — for a report run it is the run's only write,
 and the report discloses it. Each entry records: date, mode, scope,
 candidate id + title + type, verdict (applied, reverted, rejected,
-**proposed**, do-not-refactor), the commit hash at run time, the evidence
+**proposed**, deferred, do-not-refactor), the commit hash at run time, the evidence
 window, and — for proposed or unapplied candidates — the contract block
 (invariant + verification commands), so a later session can resolve "apply
 R1 from the report" without the original transcript. Verdicts expire
@@ -443,51 +454,44 @@ The Next section is a pointer, never a blocking question.
 
 ## Refactor Judgment
 
-Compressed judgment calls; doctrine 10-16 are the rules, these are the
-tells.
+Doctrine 10-16 are the rules; these are the tells.
 
 **Targets.** Good: high churn or fix density and structurally confusing;
 cross-module co-change showing a misplaced boundary; user-named pain
-corroborated by history. Bad: ugly but cold (Do Not Refactor — polishing it
-spends risk for zero return); hot but trivially simple (healthy feature
-work, not structural cost).
+corroborated by history. Bad: ugly but cold (Do Not Refactor); hot but
+trivially simple (healthy feature work, not structural cost).
 
-**DRY.** Extract when: same concept, same invariant, same change cadence,
-same tests should cover both. Keep duplication when: similar code with
-different business meaning, flows likely to diverge, the abstraction would
-need flags/callbacks/config branches, or extraction hides what maintainers
-need to see.
+**DRY.** Extract when: same concept, invariant, change cadence, and tests
+covering both. Keep duplication when: different business meaning, flows
+likely to diverge, the abstraction would need flags/callbacks/config
+branches, or extraction hides what maintainers need to see.
 
 **SOLID, as questions.** SRP: what reason to change is mixed with another?
-OCP: is extension actually recurring, or speculative? LSP: are subclasses
-substitutable in tests and runtime behavior? ISP: are callers forced to
-depend on methods they never use? DIP: does inversion clarify a boundary, or
-just add ceremony? A principle that exposes no concrete risk is not a
-finding.
+OCP: is extension recurring, or speculative? LSP: are subclasses
+substitutable in tests and runtime? ISP: are callers forced onto methods
+they never use? DIP: does inversion clarify a boundary, or add ceremony? A
+principle that exposes no concrete risk is not a finding.
 
-**Classes.** Good when they own mutable state, lifecycle, polymorphic
-behavior, a domain invariant, resource management, or a stable interface
-with multiple implementations. Suspicious when they are static namespaces,
-one-method wrappers, data bags without an invariant, adapters around
-adapters, or exist only because a framework prefers them.
+**Classes.** Good when they own mutable state, lifecycle, polymorphism, a
+domain invariant, resources, or a stable interface with multiple
+implementations. Suspicious as static namespaces, one-method wrappers,
+data bags without an invariant, adapters around adapters, or framework
+appeasement.
 
 **Design patterns.** Name a pressure that already exists ("this conditional
-is growing across three independently tested policies — that is a strategy
-problem"), never prescribe a pattern for cleanliness. Prefer describing the
-pressure over naming the pattern.
+is growing across three independently tested policies — a strategy
+problem"); never prescribe a pattern for cleanliness.
 
 **Frameworks.** Ask: what does it buy; what concepts does it force in; can
 engineers debug through it; can tests run without it; is glue outgrowing
-domain logic; would a thin adapter isolate it instead of replacing it?
-Recommend removal only with a clear smaller path and verification coverage —
-and framework removal is always report-lane, never auto-applied.
+domain logic; would a thin adapter isolate it instead? Removal needs a
+clear smaller path and verification coverage — and is always report-lane.
 
-**Performance.** Refactoring is not optimization, but it must not silently
-deoptimize. When a slice touches a hot path, the benchmark joins the
-verification surface; no runnable benchmark → report lane. There are no
-mid-run waivers — a waiver requires the user, so it belongs in Needs A
-Human. Everywhere else, performance neutrality is assumed under behavior
-preservation and needs no ceremony.
+**Performance.** Refactoring must not silently deoptimize. A slice touching
+a hot path adds the benchmark to the verification surface; no runnable
+benchmark → report lane. No mid-run waivers — a waiver requires the user
+(Needs A Human). Elsewhere, performance neutrality is assumed under
+behavior preservation.
 
 ## Commits
 

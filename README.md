@@ -487,10 +487,13 @@ apply R1 from the report                -> autonomous run, that candidate only
 ```
 
 An autonomous run never stops to ask permission mid-run — invocation is
-consent. Safety comes from mechanical gates instead: a green baseline, hard
-scoring rules on every candidate, snapshot-before-slice with auto-revert, and
-a trace review of the final diff. The worst case of a run is a report and an
-unchanged working tree. It never stages or commits — the final diff is yours.
+consent. Safety comes from mechanical gates instead: a recorded baseline
+(green — or red, where only test-first slices may apply), hard scoring rules
+on every candidate, snapshot-before-slice with auto-revert, and a trace
+review of the final diff. A repo with no runnable tests always gets a report
+run — the skill never invents its own verification mid-run. The worst case
+of a run is a report and an unchanged working tree apart from the disclosed
+ledger entry. It never stages or commits — the final diff is yours.
 
 ### When To Use It
 
@@ -515,7 +518,7 @@ unchanged working tree. It never stages or commits — the final diff is yours.
 ### Example Use
 
 ```text
-/karpathy:refactor src/auth
+/karpathy:refactor simplify src/auth
 ```
 
 An autonomous run narrates itself with markers instead of questions:
@@ -886,7 +889,9 @@ karpathy-skills/
 |-- .claude-plugin/
 |   `-- marketplace.json          # Claude Code marketplace catalog
 |-- docs/
+|   |-- karpathy-refactor-skill-plan.md  # eng-cleared refactor skill plan
 |   `-- repo-knowledge-bases.html # wiki skill rationale and longer-term design
+|-- tests/                        # contract + tool tests (unittest discover)
 `-- plugins/
     `-- karpathy/
         |-- .codex-plugin/

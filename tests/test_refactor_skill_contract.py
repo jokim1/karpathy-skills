@@ -16,8 +16,26 @@ MARKETPLACE = REPO_ROOT / ".claude-plugin" / "marketplace.json"
 def split_skill():
     text = SKILL.read_text(encoding="utf-8")
     parts = re.split(r"^---$", text, maxsplit=2, flags=re.MULTILINE)
+    if len(parts) != 3 or parts[0] != "":
+        raise AssertionError(
+            "SKILL.md must open with a clean `---`-delimited frontmatter block "
+            "(no content before the first ---, no stray delimiter whitespace)"
+        )
     frontmatter, body = parts[1], parts[2]
     return frontmatter, body
+
+
+def description_value():
+    """The description folded scalar's value, as YAML >- folding renders it."""
+    frontmatter, _ = split_skill()
+    lines = frontmatter.splitlines()
+    start = lines.index("description: >-") + 1
+    folded = []
+    for line in lines[start:]:
+        if not line.startswith("  ") or not line.strip():
+            break
+        folded.append(line.strip())
+    return " ".join(folded)
 
 
 def collapse(text):
@@ -35,9 +53,21 @@ class RefactorSkillContractTests(unittest.TestCase):
         self.assertIsNotNone(match)
         self.assertEqual(match.group(1).strip(), "karpathy-refactor")
 
-    def test_description_contains_key_trigger_terms(self):
+    def test_frontmatter_is_exactly_name_plus_folded_description(self):
         frontmatter, _ = split_skill()
-        description = collapse(frontmatter)
+        lines = [line for line in frontmatter.splitlines() if line.strip()]
+        self.assertEqual(lines[0], "name: karpathy-refactor")
+        self.assertEqual(lines[1], "description: >-")
+        for line in lines[2:]:
+            # exactly two spaces: deeper indentation keeps literal newlines
+            # in the folded value; shallower breaks YAML parsing entirely
+            self.assertTrue(
+                line.startswith("  ") and not line.startswith("   "),
+                f"bad description continuation indent: {line!r}",
+            )
+
+    def test_description_contains_key_trigger_terms(self):
+        description = description_value()
 
         for term in (
             "refactoring",
@@ -55,8 +85,8 @@ class RefactorSkillContractTests(unittest.TestCase):
         ):
             self.assertIn(term, description)
 
-        # Scoped trigger aliases only — no bare "review this architecture"
-        # or "plan a refactor" phrasing.
+        # Scoped alias presence is asserted; bare-form absence is not
+        # substring-checkable (the scoped phrases contain the bare forms).
         self.assertIn("review this architecture for refactoring", description)
         self.assertIn("plan a refactor of this subsystem", description)
 
@@ -176,7 +206,8 @@ class RefactorSkillContractTests(unittest.TestCase):
 
         self.assertIn("Every run writes the ledger", flat)
         self.assertIn(
-            "verdict (applied, reverted, rejected, **proposed**, do-not-refactor)",
+            "verdict (applied, reverted, rejected, **proposed**, deferred, "
+            "do-not-refactor)",
             flat,
         )
         self.assertIn("commit hash", body)
@@ -215,7 +246,7 @@ class RefactorSkillContractTests(unittest.TestCase):
         self.assertIn("unrevertable", body)
         self.assertIn("scratch directory outside the repo", flat)
         self.assertIn("karpathy-refactor/<repo dir name>/<run id>/", flat)
-        self.assertIn("stale scratch state", body)
+        self.assertIn("stale scratch state", flat)
         self.assertIn("it covers the worktree", flat)
 
     def test_body_includes_sensitive_area_strong_verifiability_rule(self):
@@ -270,7 +301,11 @@ class RefactorSkillContractTests(unittest.TestCase):
 
         claude_version = json.loads(claude_text)["version"]
         codex_version = json.loads(codex_text)["version"]
-        marketplace_version = json.loads(marketplace_text)["plugins"][0]["version"]
+        marketplace_plugins = json.loads(marketplace_text)["plugins"]
+        karpathy_entry = next(
+            p for p in marketplace_plugins if p["name"] == "karpathy"
+        )
+        marketplace_version = karpathy_entry["version"]
         self.assertEqual(claude_version, codex_version)
         self.assertEqual(claude_version, marketplace_version)
 

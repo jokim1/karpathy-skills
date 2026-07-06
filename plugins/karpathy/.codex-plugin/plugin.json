@@ -23,8 +23,8 @@
   "skills": "./skills/",
   "interface": {
     "displayName": "Karpathy",
-    "shortDescription": "Audit instructions, review diffs, maintain a repo wiki, and update Karpathy.",
-    "longDescription": "Use Karpathy to audit CLAUDE.md, AGENTS.md, and other agent instruction files, tune default-on stale-doc and doc-index audit checks, review code changes for scope creep and missing verification, maintain a local Markdown repo wiki for task briefs and Q&A, and keep the Karpathy plugin current. The plugin reports first and applies fixes only after approval.",
+    "shortDescription": "Audit instructions, review diffs, run verified refactors, maintain a repo wiki, and update Karpathy.",
+    "longDescription": "Use Karpathy to audit CLAUDE.md, AGENTS.md, and other agent instruction files, tune default-on stale-doc and doc-index audit checks, review code changes for scope creep and missing verification, run evidence-gated behavior-preserving refactors with baseline verification and auto-revert, maintain a local Markdown repo wiki for task briefs and Q&A, and keep the Karpathy plugin current. Audit and diff report first and apply fixes only after approval; refactor applies verified slices autonomously and never stages or commits.",
     "developerName": "Joseph Kim",
     "category": "Productivity",
     "capabilities": [
