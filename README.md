@@ -7,11 +7,13 @@ The goal is simple: when an AI agent writes code for you, these skills help you
 catch the common failure modes before they turn into bugs, bloated code, or
 messy commits.
 
-This repo ships one plugin, `karpathy`, with three core skills plus setup and
+This repo ships one plugin, `karpathy`, with four core skills plus setup and
 update commands:
 
 - `/karpathy:audit` - reviews your AI agent instruction files.
 - `/karpathy:diff` - reviews AI-generated code changes before you commit.
+- `/karpathy:refactor` - evidence-gated, behavior-preserving refactoring with
+  a recorded verification baseline and auto-revert.
 - `/karpathy:wiki` - a repo wiki / memory layer for helping agents understand
   the codebase before they edit it.
 - `/karpathy:setup` / `/karpathy:configure` - tunes the default-on audit checks
@@ -53,6 +55,7 @@ The four principles behind the plugin are:
 | --- | --- | --- | --- | --- |
 | `/karpathy:audit` | Shipped | A review of your `CLAUDE.md`, `AGENTS.md`, or Cursor rules. | Making sure your agent instructions are clear, current, and useful. | Better standing instructions, fewer vague rules, less stale context. |
 | `/karpathy:diff` | Shipped | A review of the code changes an AI agent just made. | Catching scope creep before you commit. | Smaller diffs, fewer surprise edits, safer commits. |
+| `/karpathy:refactor` | Shipped MVP | An evidence-gated refactor executor: history evidence, verification baseline, small verified slices, auto-revert. | Simplifying a subsystem, or finding where refactoring actually pays off, without behavior changes. | Refactors that verify against a baseline instead of relying on taste. |
 | `/karpathy:wiki` | Shipped MVP | A local repo wiki that the agent maintains and reads before coding. | Helping the agent understand your project without rereading everything every time. | Faster orientation, better task briefs, less repeated context work. |
 | `/karpathy:setup` / `/karpathy:configure` | Shipped | A Pipelane-style checklist for audit docs checks. | Tuning or opting out of stale-doc and doc-index checks. | Audits catch roadmap/spec/todo rot and missing indexes by default. |
 | `/karpathy:update` | Shipped | A guided plugin update workflow. | Staying current without remembering plugin-manager commands. | Update reminders point to one Karpathy command. |
@@ -154,6 +157,7 @@ export KARPATHY_DISABLE_UPDATE_CHECK=1
 ```text
 /karpathy:audit [path]
 /karpathy:diff [ref/path]
+/karpathy:refactor [path/subsystem]
 /karpathy:wiki [question/task/doctor]
 /karpathy:setup [D1/D2 | --enable stale-docs | --disable doc-indexes]
 /karpathy:configure [same options as setup]
@@ -166,6 +170,8 @@ You can also ask in normal words:
 audit my AGENTS.md
 review my changes before I commit
 did the agent touch anything it should not have?
+simplify src/payments
+where does refactoring actually pay off in this repo?
 karpathy wiki how does auth work?
 karpathy setup
 karpathy configure --disable doc-indexes
@@ -177,6 +183,7 @@ Claude Code command form:
 ```text
 /karpathy:audit
 /karpathy:diff
+/karpathy:refactor
 /karpathy:wiki
 /karpathy:setup
 /karpathy:configure
@@ -188,6 +195,7 @@ Human-friendly phrasing that should also trigger the skills:
 ```text
 karpathy audit
 karpathy diff
+karpathy refactor
 karpathy wiki
 karpathy setup
 karpathy configure
@@ -809,6 +817,7 @@ karpathy-skills/
         |   |-- audit.md          # /karpathy:audit command
         |   |-- configure.md      # /karpathy:configure command
         |   |-- diff.md           # /karpathy:diff command
+        |   |-- refactor.md       # /karpathy:refactor command
         |   |-- setup.md          # /karpathy:setup command
         |   |-- update.md         # /karpathy:update command
         |   `-- wiki.md           # /karpathy:wiki command
@@ -822,6 +831,8 @@ karpathy-skills/
             |   `-- scripts/
             |       `-- audit_tool.py
             |-- karpathy-diff/
+            |   `-- SKILL.md
+            |-- karpathy-refactor/
             |   `-- SKILL.md
             |-- karpathy-update/
             |   `-- SKILL.md

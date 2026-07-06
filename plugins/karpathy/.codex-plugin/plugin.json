@@ -1,7 +1,7 @@
 {
   "name": "karpathy",
   "version": "1.3.0",
-  "description": "Operationalizes Andrej Karpathy's LLM-coding principles as coding-agent skills. Audit agent instruction files, run default-on stale-doc/index checks, review code diffs before commit, maintain a local repo wiki, and update the Karpathy plugin.",
+  "description": "Operationalizes Andrej Karpathy's LLM-coding principles as coding-agent skills. Audit agent instruction files, run default-on stale-doc/index checks, review code diffs before commit, run evidence-gated behavior-preserving refactors (/karpathy:refactor), maintain a local repo wiki, and update the Karpathy plugin.",
   "author": {
     "name": "Joseph Kim",
     "url": "https://github.com/jokim1"
@@ -35,6 +35,7 @@
     "defaultPrompt": [
       "Review my changes before I commit.",
       "Audit this AGENTS.md for agent guidance.",
+      "Where does refactoring actually pay off in this repo?",
       "Configure Karpathy audit docs checks.",
       "Set up a repo wiki for this project.",
       "Use the repo wiki to brief this task.",
