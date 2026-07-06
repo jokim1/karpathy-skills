@@ -237,7 +237,10 @@ counts, exit codes) before any edit:
   cannot run unattended: it caps that candidate's verifiability at weak
   (report lane) unless the check is mechanized into a command.
 - No runnable verification: announce it, cap every candidate's verifiability
-  at weak, and downgrade to a report run.
+  at weak, and downgrade to a report run. This downgrade is not escapable
+  mid-run: checks the run itself writes or resurrects (recovered deleted
+  tests, new smoke scripts) do not create a baseline surface — propose them
+  in the report instead.
 
 ### 6. Apply refactor lenses
 

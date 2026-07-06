@@ -119,6 +119,7 @@ class RefactorSkillContractTests(unittest.TestCase):
         self.assertIn("test-first slices only", body)
         self.assertIn("capped at weak", body)
         self.assertIn("downgrade to a report run", flat)
+        self.assertIn("not escapable mid-run", flat)
 
     def test_body_includes_refactor_markers(self):
         _, body = split_skill()
