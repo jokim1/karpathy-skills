@@ -361,9 +361,12 @@ these mechanics:
   stop loudly, leave the tree as-is, and mark the slice unrevertable in the
   report. Never force a restore over live edits.
 - **Scratch state** (contract file, snapshots, untracked-file lists) lives
-  in one run-scoped scratch directory outside the repo. A new invocation
-  that finds stale scratch state from an interrupted run says so in its
-  first markers before doing anything else.
+  in one run-scoped scratch directory outside the repo, at the fixed
+  convention `<system temp>/karpathy-refactor/<repo dir name>/<run id>/`.
+  At start, list that repo's convention directory: stale scratch state from
+  an interrupted run is disclosed in the first markers before doing
+  anything else, and a half-applied slice in the worktree is matched
+  against its recorded snapshot — never silently treated as user edits.
 - **Scope of the guarantee:** it covers the worktree. Verification commands
   with external side effects (databases, caches, snapshot-test auto-updates,
   local services) are outside it — flag side-effectful suites in the report.

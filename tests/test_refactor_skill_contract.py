@@ -214,6 +214,7 @@ class RefactorSkillContractTests(unittest.TestCase):
         self.assertIn("Dirty tree at invocation", body)
         self.assertIn("unrevertable", body)
         self.assertIn("scratch directory outside the repo", flat)
+        self.assertIn("karpathy-refactor/<repo dir name>/<run id>/", flat)
         self.assertIn("stale scratch state", body)
         self.assertIn("it covers the worktree", flat)
 
