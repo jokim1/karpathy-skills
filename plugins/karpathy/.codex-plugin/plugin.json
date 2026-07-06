@@ -1,6 +1,6 @@
 {
   "name": "karpathy",
-  "version": "1.3.0",
+  "version": "1.4.0",
   "description": "Operationalizes Andrej Karpathy's LLM-coding principles as coding-agent skills. Audit agent instruction files, run default-on stale-doc/index checks, review code diffs before commit, run evidence-gated behavior-preserving refactors (/karpathy:refactor), maintain a local repo wiki, and update the Karpathy plugin.",
   "author": {
     "name": "Joseph Kim",

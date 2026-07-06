@@ -456,7 +456,87 @@ Want me to apply the proposed fixes?
 
 ---
 
-## Skill 3: `/karpathy:wiki`
+## Skill 3: `/karpathy:refactor`
+
+### What It Does
+
+`/karpathy:refactor` reviews a subsystem for refactoring — or refactors it —
+with evidence and verification instead of taste. It is not a generic "clean
+code" pass:
+
+- It reads the repo's git history first (churn, co-change, fix clusters), so
+  candidates target code that is actually costing you, not code that merely
+  looks ugly.
+- It records a verification baseline (your tests) before touching anything.
+- It applies small behavior-preserving slices one at a time, re-verifies
+  against the baseline after each, and auto-reverts any slice that fails.
+- It escalates cross-cutting problems to an architecture-level plan instead
+  of cramming them into a refactor.
+- It writes every verdict to a refactor ledger
+  (`knowledge/wiki/refactor-ledger.md` if you use the wiki skill, else
+  `docs/refactor-ledger.md`) so future runs don't re-litigate settled
+  decisions.
+
+How you phrase the request decides the mode:
+
+```text
+review this service for a refactor      -> report run: zero code edits
+where does refactoring pay off here?    -> report run: zero code edits
+simplify src/payments                   -> autonomous run: applies gated slices
+apply R1 from the report                -> autonomous run, that candidate only
+```
+
+An autonomous run never stops to ask permission mid-run — invocation is
+consent. Safety comes from mechanical gates instead: a green baseline, hard
+scoring rules on every candidate, snapshot-before-slice with auto-revert, and
+a trace review of the final diff. The worst case of a run is a report and an
+unchanged working tree. It never stages or commits — the final diff is yours.
+
+### When To Use It
+
+- A module keeps fighting you: every change touches the same tangled files.
+- You inherited code that looks overbuilt and want evidence before touching it.
+- Someone proposes a DRY/SOLID cleanup and you want it argued from history,
+  not vibes.
+- After a report run, when you want a named candidate executed.
+
+### What It Catches
+
+| Problem | What the skill does |
+| --- | --- |
+| Weak abstractions (one-method wrappers, adapters around adapters) | Inline/Delete candidates, each with a named payoff. |
+| Premature DRY | Keeps still-diverging concepts separate; extracts only stable ones. |
+| SOLID cargo culting | Cites a principle only when it exposes a concrete risk. |
+| Framework bloat | Fences it behind thin boundaries; removal is never auto-applied. |
+| Cold ugly code | "Do Not Refactor" — polishing it spends risk for zero return. |
+| Hot paths | Frozen unless a benchmark is runnable as part of verification. |
+| Behavior changes disguised as refactors | Routed to the report for a human, never auto-applied. |
+
+### Example Use
+
+```text
+/karpathy:refactor src/auth
+```
+
+An autonomous run narrates itself with markers instead of questions:
+
+```text
+[refactor] Mode: autonomous — phrasing "simplify src/auth"
+[refactor] Baseline: npm test → 212 passed, 0 failed
+[refactor] Applying R1 (inline): collapse OneShotAdapter into its caller
+[refactor] Touching sensitive area — auth: R1 moves session-refresh helper
+[refactor] Verified R1: baseline reproduced
+[refactor] Reverted R2: npm test 210/212 — pre-slice state restored
+[refactor] Ledger updated: knowledge/wiki/refactor-ledger.md
+```
+
+Every run ends with one terminal report: what was applied and verified, what
+was reverted, what needs a human (with the reason), what not to refactor, and
+the exact follow-up invocation if you want more.
+
+---
+
+## Skill 4: `/karpathy:wiki`
 
 ### What It Does
 
@@ -861,6 +941,7 @@ When publishing a new version:
    python3 -m json.tool .agents/plugins/marketplace.json >/dev/null
    python3 -m json.tool plugins/karpathy/.codex-plugin/plugin.json >/dev/null
    python3 -m py_compile plugins/karpathy/scripts/check_update.py
+   python3 -m unittest discover -s tests
    ```
 
 4. Commit, tag, and push.

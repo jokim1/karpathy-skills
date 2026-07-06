@@ -1,7 +1,7 @@
 {
   "name": "karpathy",
   "description": "Operationalizes Andrej Karpathy's LLM-coding principles as Claude Code tools. /karpathy:audit reviews agent instruction files and default-on stale-doc/index checks; /karpathy:setup configures those audit checks; /karpathy:diff reviews in-progress code changes before commit; /karpathy:refactor applies evidence-gated, behavior-preserving refactors with baseline verification and auto-revert; /karpathy:wiki creates and maintains a local repo knowledge base; /karpathy:update keeps the plugin current. Audit and diff report first and apply fixes only on approval.",
-  "version": "1.3.0",
+  "version": "1.4.0",
   "author": {
     "name": "Joseph Kim"
   },
