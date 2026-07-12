@@ -9,7 +9,7 @@
       "name": "karpathy",
       "source": "./plugins/karpathy",
       "description": "Operationalizes Andrej Karpathy's LLM-coding principles. /karpathy:audit reviews agent instruction files; /karpathy:diff reviews in-progress code changes before commit; /karpathy:refactor applies evidence-gated, behavior-preserving refactors; /karpathy:wiki creates and maintains a local repo knowledge base; /karpathy:update checks for and applies plugin updates.",
-      "version": "1.4.0",
+      "version": "1.4.1",
       "author": {
         "name": "Joseph Kim"
       },
