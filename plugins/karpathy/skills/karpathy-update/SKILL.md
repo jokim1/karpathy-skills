@@ -2,9 +2,10 @@
 name: karpathy-update
 description: >-
   Check for and update the Karpathy plugin itself. Use when the user says
-  "karpathy update", "/karpathy update", "/karpathy:update", asks to update or
-  upgrade the Karpathy skill/plugin, or asks whether a Karpathy plugin update is
-  available. This is for plugin updates, not repo wiki content updates.
+  "karpathy update", "/karpathy:update", the client-dependent shorthand
+  "/karpathy update", asks to update or upgrade the Karpathy skill/plugin, or
+  asks whether a Karpathy plugin update is available. This is for plugin
+  updates, not repo wiki content updates.
 ---
 
 # Karpathy Update
@@ -24,11 +25,14 @@ current client.
 2. If the user asked for status only (`--check`, `check`, "is there an update"),
    run `--check` and report the result.
 3. Otherwise run `--update`.
-4. If the helper reports `updated`, summarize the command results and tell the
-   user to start a new Codex thread or restart/reload the client so refreshed
-   skills and hooks are loaded.
+4. If the helper reports `repaired` or `restart_required`, summarize the
+   command results and tell the user to start a new Codex thread or
+   restart/reload the client so refreshed skills and hooks are loaded.
 5. If the helper reports `manual_required`, relay the exact fallback command(s)
    from the helper. Do not invent a manual cache rewrite.
+6. If the helper reports `dry_run`, `none`, or `update_available`, report the
+   status and exact next steps from the helper without adding extra repair
+   commands.
 
 ## Client rules
 
@@ -45,21 +49,32 @@ current client.
 
   ```text
   /plugin marketplace update karpathy-skills
+  /plugin install karpathy@karpathy-skills
   /reload-plugins
   ```
+
+- If `/karpathy:update` itself is missing in Codex, recover with:
+
+  ```bash
+  codex plugin marketplace upgrade karpathy-skills
+  codex plugin add karpathy@karpathy-skills
+  ```
+
+  Then start a new Codex thread.
 
 ## UX contract
 
 When an update is available, say:
 
 ```text
-Run /karpathy update to install it.
+Run /karpathy:update to install it.
 ```
 
-If the client rejects that spelling, add the fallback:
+If the client rejects slash commands or the user tried `/karpathy update`, add
+the fallback:
 
 ```text
-Use /karpathy:update instead, or type karpathy update as normal text.
+Type karpathy update as normal text.
 ```
 
 Keep the explanation short. This command updates the plugin itself; use

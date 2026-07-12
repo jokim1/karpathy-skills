@@ -1,2 +1,6 @@
 # Machine-local agent instructions for this checkout.
 /AGENTS.md
+
+# Python interpreter artifacts.
+__pycache__/
+*.pyc

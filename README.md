@@ -84,13 +84,15 @@ Inside Claude Code:
 To update later:
 
 ```text
-/karpathy update
+/karpathy:update
 ```
 
 Fallback if the command is not available yet:
 
 ```text
+karpathy update
 /plugin marketplace update karpathy-skills
+/plugin install karpathy@karpathy-skills
 /reload-plugins
 ```
 
@@ -121,10 +123,16 @@ codex plugin add karpathy@karpathy-skills
 To update later:
 
 ```text
-/karpathy update
+/karpathy:update
 ```
 
 Fallback if the command is not available yet:
+
+```text
+karpathy update
+```
+
+Shell fallback:
 
 ```bash
 codex plugin marketplace upgrade karpathy-skills
@@ -134,15 +142,19 @@ codex plugin add karpathy@karpathy-skills
 After a plugin update, start a new Codex thread so the refreshed skills and
 hooks are loaded.
 
+If `/karpathy:update` is missing because the current thread loaded an old or
+partial install, run the shell fallback above and then start a new Codex thread.
+
 ### Update Reminders
 
 The plugin includes an advisory `SessionStart` hook for Claude Code and Codex
 clients that have plugin hooks trusted or enabled.
 
-At most once per day, it compares your installed plugin version with the GitHub
-version and surfaces update instructions if a newer version is available. It does
-not update files automatically and it does not block your session. The reminder
-tells users to run `/karpathy update`.
+When the hook runs, it performs a bounded read-only check of the current plugin
+root and surfaces repair instructions if required command, skill, or manifest
+files are missing. It does not perform network version checks, run
+plugin-manager commands, archive files, update files automatically, or block your
+session. For version checks, run `/karpathy:update --check`.
 
 To disable the reminder:
 
@@ -202,10 +214,10 @@ karpathy configure
 karpathy update
 ```
 
-Some clients may reject `/karpathy wiki`, `/karpathy setup`, or
-`/karpathy update` as slash commands because plugin commands are namespaced with
-a colon. If that happens, use `/karpathy:wiki`, `/karpathy:setup`,
-`/karpathy:update`, or type the phrase as normal text.
+Plugin slash commands are namespaced with a colon. Use `/karpathy:wiki`,
+`/karpathy:setup`, and `/karpathy:update` as the reliable slash forms. Some
+clients may also accept `/karpathy wiki`, `/karpathy setup`, or
+`/karpathy update`; if a space form is rejected, type the phrase as normal text.
 
 ---
 
