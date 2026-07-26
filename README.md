@@ -335,20 +335,21 @@ whether those changes belong in git.
 /karpathy:setup D1
 ```
 
-Possible result:
+Excerpt from a possible result:
 
 ```text
 Coverage: 2/4 principles present
-Quality: 3 findings
 
-Critical:
-- No verification commands listed.
-
-Warnings:
-- Roadmap content is living in the always-read instruction file.
-- Several rules are vague and not checkable.
-
-Want me to apply the proposed changes?
+## Quality findings
+### [WARNING] Roadmap state is always loaded
+- **Axis:** CE9 - Memory routing
+- **Location:** Roadmap section
+- **Reader tier:** Also mid-tier agents
+- **Cut safety:** safe-for-all-readers
+- **Impact:** 90 tokens x every-turn replay
+- **Issue:** Volatile roadmap state is in the instruction file.
+- **Why it matters:** Every turn pays for context that quickly becomes stale.
+- **Fix:** Move the state to the roadmap and leave a short pointer.
 ```
 
 ---

@@ -4,7 +4,7 @@ description: >-
   Audit a CLAUDE.md, AGENTS.md, .cursor/rules file, or other AI-agent
   instruction/memory file against Andrej Karpathy's four LLM-coding principles.
   Checks two things: whether the file tells the agent to follow the principles
-  (coverage), and whether the file itself earns its context budget — lean,
+  (coverage), and whether the file itself earns its context budget - lean,
   unambiguous, current, contradiction-free, well-layered, and sized for every
   model that reads it (quality). Use this whenever the user wants to review,
   audit, critique, tighten, clean up, or improve a CLAUDE.md / AGENTS.md /
@@ -24,7 +24,7 @@ The core instruction audit has two independent halves:
 
 - **Coverage** — does the file actually instruct the agent to follow the four
   principles?
-- **Quality** — judged by the same four principles plus the
+- **Quality** - judged by the same four principles plus the
   context-engineering axes (progressive disclosure, layering, memory routing,
   reader tier), is the file itself a good artifact?
 
@@ -61,10 +61,10 @@ good instruction file legitimately contains:
 
 None of that is bloat. Do not tell the user to delete useful context. The
 boundary is compactness: a short directory map or small key-file table is
-legitimate orientation, while an exhaustive catalog — or anything the agent
-could derive by inspecting the code or filesystem itself — is the
+legitimate orientation, while an exhaustive catalog - or anything the agent
+could derive by inspecting the code or filesystem itself - is the
 progressive-disclosure defect axis CE6 flags. This skill audits *behavioral
-guidance and file hygiene* — not whether a given piece of project context
+guidance and file hygiene* - not whether a given piece of project context
 deserves to exist. When in doubt, leave it and say so.
 
 ## The four principles
@@ -109,7 +109,7 @@ deserves to exist. When in doubt, leave it and say so.
    accessible instruction layer for CE8 and CE11.
 5. **Run docs checks** unless `.karpathy.json` disables them.
 6. **Write the report** in the format below. Then stop.
-7. **Apply on approval.** Only after the user approves, make the edits —
+7. **Apply on approval.** Only after the user approves, make the edits -
    surgically. Preserve their headings, voice, and ordering; change only the
    lines the findings name; never reformat the whole file. (Yes — the skill
    itself follows principle 3.) Do not stage or commit the instruction file.
@@ -140,7 +140,7 @@ coverage is Missing, do not assume it's a defect. Flag it, but ask whether the
 principles live in the user's global memory file, and recommend global as the
 home for them unless the user wants project-specific overrides. Before
 recommending that hoist, verify which harnesses actually load the global file
-(axis CE11) — consolidating into a file only some harnesses read silently
+(axis CE11) - consolidating into a file only some harnesses read silently
 strips the principles from the others.
 
 ## Quality audit
@@ -157,7 +157,7 @@ replayed on every turn outweighs a 12 KB file read once per session. State
 the replay tier when you rank (every-turn base > per-session digest >
 per-task read > rarely loaded).
 
-**CE1 — Lean** (Simplicity turned inward). Flag content that costs tokens
+**CE1 - Lean** (Simplicity turned inward). Flag content that costs tokens
 every turn and earns nothing:
 
 - Generic advice that just restates competent default behavior ("write clean
@@ -168,81 +168,81 @@ every turn and earns nothing:
   struck-through "done" entries, PR numbers. That belongs in `docs/`, not in a
   file loaded on every turn.
 
-**CE2 — Unambiguous** (Think Before Coding turned inward). Flag instructions
+**CE2 - Unambiguous** (Think Before Coding turned inward). Flag instructions
 the agent cannot act on without guessing, or check itself against: "handle
 errors appropriately", "make it performant", "keep it clean". Rewrite each
 into something concrete and checkable. One narrow, informational check lives
-here: does the file *name the commands* that prove a change is good — test,
+here: does the file *name the commands* that prove a change is good - test,
 typecheck, lint, build? That is distinct from coverage of principle 4 (the
 behavioral instruction to define success criteria and loop). A file can list
-every command yet never tell the agent to use them as a loop — only the
+every command yet never tell the agent to use them as a loop - only the
 command gap is reported here; the behavioral gap is a Coverage row. If the
 commands are absent, flag it; if present, say so.
 
-**CE3 — Current** (no staleness). Flag content that is correct today and
+**CE3 - Current** (no staleness). Flag content that is correct today and
 misleading in a month:
 
 - Words like "currently", "for now", "this week", "in flight", "transient", "TODO".
 - Dated markers: phase numbers, sprint names, specific PR/commit references.
 - Struck-through items left in place after completion, and resolved or
-  superseded entries retained in full — collapse a resolved entry to its
+  superseded entries retained in full - collapse a resolved entry to its
   one-line durable takeaway.
 
 Recommend moving volatile state out of the file and keeping only durable facts.
 
-**CE4 — Contradiction-free.** Flag pairs of instructions that can't both be
+**CE4 - Contradiction-free.** Flag pairs of instructions that can't both be
 followed (e.g. "never delete data" alongside "treat local data as
-disposable"). Contradictions are the worst defect — they guarantee the agent
+disposable"). Contradictions are the worst defect - they guarantee the agent
 guesses. Also flag **latent contradictions**: a project default that would
 collide with the four principles once they are added (this skill recommends
 adding them). Example: a default that licenses deleting legacy code anywhere
 vs. principle 3's "no edits to code you weren't asked to change." Rate these
-Critical — the skill's own workflow is about to activate the conflict — and
+Critical - the skill's own workflow is about to activate the conflict - and
 resolve them by scoping the project default to the task, not by dropping it.
 
-**CE5 — Rules → judgment.** A frontier model handles many situations better
+**CE5 - Rules → judgment.** A frontier model handles many situations better
 via judgment than via an enumerated rule. Flag over-constraining "never do X
 / always do Y" scaffolding that could become an outcome statement ("ship a
 change only after a named check passes" rather than a ten-step procedure).
-**Hard limit — keep the rule, do not soften:** safety, destructive or
+**Hard limit - keep the rule, do not soften:** safety, destructive or
 irreversible operations, security, credential/privacy handling, and
 merge/release authority. Rule density in a safety contract is correct, not
 bloat; when a file is mostly such rules, report the density as justified
 rather than hunting for trims. Check the reader tier (CE11) before proposing any
 judgment-based trim.
 
-**CE6 — Progressive disclosure.** Flag a monolithic file that should be a
+**CE6 - Progressive disclosure.** Flag a monolithic file that should be a
 light core plus an on-demand tree (skills, referenced docs loaded only when
 relevant). The file should briefly orient, spend its tokens on real gotchas,
 point to deeper material, and never state what code or filesystem inspection
 would show. Exhaustive file/field/config catalogs inlined in an always-loaded
-file are the canonical hit — move them to the doc that owns them, leaving an
+file are the canonical hit - move them to the doc that owns them, leaving an
 orienting summary and a pointer.
 
-**CE7 — Interfaces over examples.** Flag long inline tool-usage examples that
+**CE7 - Interfaces over examples.** Flag long inline tool-usage examples that
 a better parameter or interface description would replace. This fires rarely
 on prose-heavy instruction files; when the file's weight is specs and
 catalogs rather than worked examples, say so and move on.
 
-**CE8 — Cross-layer duplication.** Flag content repeated across the layers a
+**CE8 - Cross-layer duplication.** Flag content repeated across the layers a
 model sees: system prompt, skills, project `AGENTS.md`/`CLAUDE.md`, global
 memory file, auto-memory. Name the single best owner. **Check the reader tier
-(CE11) before proposing the merge** — apparent duplication is sometimes the only
+(CE11) before proposing the merge** - apparent duplication is sometimes the only
 copy a given reader gets.
 
-**CE9 — Memory routing.** Flag content living in an instruction file that
+**CE9 - Memory routing.** Flag content living in an instruction file that
 belongs in a durable record or auto-memory instead: volatile state (versions,
 quota levels, "currently exhausted"), one-off incident narration, and stable
 reference data (identities, IDs, key locations). The instruction file keeps
 the durable *rule*; the evidence and state move to records loaded on demand.
 
-**CE10 — References over prose.** Flag a prose spec that should be a link or
-`@`-reference to the authoritative code, test, doc, or artifact — especially
+**CE10 - References over prose.** Flag a prose spec that should be a link or
+`@`-reference to the authoritative code, test, doc, or artifact - especially
 values that can drift from a source of truth (a re-typed config schema, a
 duplicated palette, an enumerated requirement list a tool already enforces).
 Prefer the pointer; it cannot rot out of sync.
 
-**CE11 — Reader tier (required on every finding).** Before proposing any cut,
+**CE11 - Reader tier (required on every finding).** Before proposing any cut,
 identify who reads this file:
 
 - **Frontier-model only** (e.g. a private preference file read by one strong
@@ -260,33 +260,33 @@ working a repo must obey is the per-repo file.
 
 Tag each finding's proposed change:
 
-- **safe-for-all-readers** — the cut does not rely on model judgment to
+- **safe-for-all-readers** - the cut does not rely on model judgment to
   recover the dropped guidance: a pointer to a named file, de-duplication of
   true boilerplate, or removal of stale/volatile state.
-- **claude-only** — the cut is safe only where the reader is a frontier
+- **claude-only** - the cut is safe only where the reader is a frontier
   model; it would degrade a mid- or lower-tier reader (an enumerated rule
   turned into a judgment call, an explicit anti-fabrication rule compressed).
   Do not apply on a shared surface while mid-tier readers depend on it.
 
 A cross-layer duplication (CE8) that is the only copy a mid- or lower-tier
-reader sees is reclassified **KEEP** by this axis — a load-bearing
+reader sees is reclassified **KEEP** by this axis - a load-bearing
 redundancy. Say so explicitly; it is a finding in its own right, not an
 oversight.
 
 Quick reference:
 
 ```
-CE1  Lean            — costs tokens every turn, earns nothing?
-CE2  Unambiguous     — can the agent act on and check it? verification commands named?
-CE3  Current         — will it rot? resolved entry kept in full?
-CE4  Contradiction   — can two rules both be followed? (worst defect)
-CE5  Rules→judgment  — over-constrained? (KEEP safety/destructive/security/merge rules)
-CE6  Disclosure      — monolith that should be core + on-demand tree? states what inspection shows?
-CE7  Interfaces      — long example a parameter description would replace?
-CE8  Duplication     — repeated across layers? name one owner (check reader tier first)
-CE9  Memory routing  — volatile/reference content that belongs in a durable record?
-CE10 References      — prose spec that should be a link/@-ref to a source of truth?
-CE11 Reader tier     — who reads it? tag every cut safe-for-all vs claude-only; verify inheritance
+CE1  Lean            - costs tokens every turn, earns nothing?
+CE2  Unambiguous     - can the agent act on and check it? verification commands named?
+CE3  Current         - will it rot? resolved entry kept in full?
+CE4  Contradiction   - can two rules both be followed? (worst defect)
+CE5  Rules→judgment  - over-constrained? (KEEP safety/destructive/security/merge rules)
+CE6  Disclosure      - monolith that should be core + on-demand tree? states what inspection shows?
+CE7  Interfaces      - long example a parameter description would replace?
+CE8  Duplication     - repeated across layers? name one owner (check reader tier first)
+CE9  Memory routing  - volatile/reference content that belongs in a durable record?
+CE10 References      - prose spec that should be a link/@-ref to a source of truth?
+CE11 Reader tier     - who reads it? tag every cut safe-for-all vs claude-only; verify inheritance
 ```
 
 ## Docs audit
@@ -477,9 +477,9 @@ Severity:
   latent ones), no verification commands, instructions vague enough to force
   guessing, or a claude-only cut proposed on a surface a mid/lower-tier
   reader depends on.
-- **Warning** — degrades quality: bloat, staleness, redundancy with a safe
+- **Warning** - degrades quality: bloat, staleness, redundancy with a safe
   owner, ambiguity, drift-prone re-typed values.
-- **Nit** — minor: wording, ordering, formatting, trivial self-inconsistency.
+- **Nit** - minor: wording, ordering, formatting, trivial self-inconsistency.
 
 After the report, ask: "Want me to apply the proposed changes?" Then stop.
 
@@ -494,7 +494,7 @@ When approved:
 - Prefer recommending the global `~/.claude/CLAUDE.md` as the home for the four
   behavioral principles; only write them into a project file if the user asks.
   Before moving anything, verify the global file is actually loaded by every
-  harness in play (axis CE11) — a hoist that strips a reader is a regression.
+  harness in play (axis CE11) - a hoist that strips a reader is a regression.
 - When you move volatile content out, put it somewhere sensible (`docs/`)
   rather than deleting it, unless the user says delete.
 - Leave `CLAUDE.md`, `AGENTS.md`, `.cursor/rules`, and similar agent files
