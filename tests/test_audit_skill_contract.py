@@ -33,6 +33,25 @@ class AuditSkillContractTests(unittest.TestCase):
         self.assertIn("--reset", text)
         self.assertIn("Writes are limited to `.karpathy.json`", text)
 
+    def test_context_axes_do_not_collide_with_setup_rows(self):
+        text = SKILL.read_text(encoding="utf-8")
+        quality = text.split("## Quality audit", 1)[1].split("## Docs audit", 1)[0]
+        setup = text.split("## Audit setup / configure", 1)[1]
+
+        for axis in range(1, 12):
+            self.assertIn(f"**CE{axis} ", quality)
+        self.assertNotIn("**A1 ", quality)
+        self.assertNotIn("**A2 ", quality)
+        self.assertIn("(`A1`, `A2`)", setup)
+
+    def test_global_coverage_guidance_requires_verified_inheritance(self):
+        text = SKILL.read_text(encoding="utf-8")
+        coverage = text.split("## Coverage audit", 1)[1].split("## Quality audit", 1)[0]
+
+        self.assertIn("only after verifying that every harness and", coverage)
+        self.assertIn("otherwise keep shared rules in the project file", coverage)
+        self.assertIn("exhaustive or inspection-derivable catalogs", text)
+
     def test_setup_and_configure_commands_share_the_same_workflow(self):
         setup_text = SETUP_COMMAND.read_text(encoding="utf-8")
         configure_text = CONFIGURE_COMMAND.read_text(encoding="utf-8")

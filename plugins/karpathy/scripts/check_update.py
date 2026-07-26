@@ -73,6 +73,7 @@ LEGACY_STANDALONE_HASHES = {
         "9932c5d82cb576145f92e132fe5e72fa69996edccdcac5eef4e5a08c949ac665",
         "b9904139473ecaf20e5fbd669ad24b9d46ae170fd4878a1b313e1dff4368879b",
         "e9b05918de18386ae682e9981f5d2402306443080309637900c44f6b21e3e05b",
+        "24ea6380dead155d5e8382d2d5ed07f220099d5782934de480912aa5a576bf6f",
     },
     "karpathy-diff": {
         "c38fe0ed5ed96ecf2ac010e0c06e92f7eda45bb99aa4fa0739be17615b6e957d",
