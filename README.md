@@ -288,7 +288,7 @@ agent starts misbehaving is usually enough.
 
    ```text
    [WARNING] Stale sprint notes
-   Axis: B9 - Memory routing
+   Axis: CE9 - Memory routing
    Location: Roadmap section
    Reader tier: Also mid-tier agents
    Cut safety: safe-for-all-readers

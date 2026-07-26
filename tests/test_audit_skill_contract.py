@@ -33,26 +33,33 @@ class AuditSkillContractTests(unittest.TestCase):
         self.assertIn("--reset", text)
         self.assertIn("Writes are limited to `.karpathy.json`", text)
 
-    def test_context_axes_use_the_authoritative_namespace(self):
+    def test_context_axes_use_the_ce_namespace(self):
         text = SKILL.read_text(encoding="utf-8")
         quality = text.split("## Quality audit", 1)[1].split("## Docs audit", 1)[0]
         setup = text.split("## Audit setup / configure", 1)[1]
 
-        axes = ("A1", "A2", "A3", "A4", "B5", "B6", "B7", "B8", "B9", "B10", "C")
+        axes = ("CE1", "CE2", "CE3", "CE4", "CE5", "CE6", "CE7", "CE8", "CE9", "CE10", "CE11")
         for axis in axes:
             self.assertIn(f"**{axis} ", quality)
-        self.assertNotIn("**CE1 ", quality)
+        # The audit layer owns the CE namespace; the published setup surface
+        # keeps its established A1/A2 instruction rows untouched.
+        self.assertNotIn("**A1 ", quality)
+        self.assertNotIn("**B5 ", quality)
         self.assertIn("(`A1`, `A2`)", setup)
 
-    def test_scope_and_coverage_remain_unchanged(self):
+    def test_scope_boundary_and_coverage_verification(self):
         text = SKILL.read_text(encoding="utf-8")
         scope = text.split("## Scope: what is NOT a defect", 1)[1].split("## The four principles", 1)[0]
         coverage = text.split("## Coverage audit", 1)[1].split("## Quality audit", 1)[0]
         quality = text.split("## Quality audit", 1)[1].split("## Docs audit", 1)[0]
 
-        self.assertNotIn("progressive-disclosure", scope)
+        # Scope draws the explicit boundary against the CE6 disclosure defect.
+        self.assertIn("progressive-disclosure defect axis CE6", scope)
+        # Coverage keeps its global-home nuance but must require verifying
+        # which harnesses load the global file before recommending a hoist.
         self.assertIn("that way they apply\neverywhere without being repeated", coverage)
         self.assertIn("unless the user wants project-specific overrides", coverage)
+        self.assertIn("verify which harnesses actually load the global file", coverage)
         self.assertIn("Exhaustive file/field/config catalogs", quality)
         self.assertIn("Verify inheritance, do not assume it", quality)
 
