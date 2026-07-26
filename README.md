@@ -233,7 +233,8 @@ clients may also accept `/karpathy wiki`, `/karpathy setup`, or
 - similar project or global agent instruction files
 
 These files matter because the agent reads them repeatedly. If they are bloated,
-stale, vague, or contradictory, the agent will behave worse.
+stale, vague, contradictory, poorly layered, or unsafe for some of their
+readers, the agent will behave worse.
 
 By default, audit checks those always-read instruction files and repo docs.
 Use `/karpathy:setup` or `/karpathy:configure` to tune or opt out of doc checks:
@@ -275,19 +276,30 @@ agent starts misbehaving is usually enough.
 3. It reports two things:
 
    - Coverage: does the file teach the agent the four principles?
-   - Quality: is the file itself clear, current, and useful?
+   - Quality: does the file earn its context budget under the four principles
+     and the context-engineering rubric?
 
    It also reports a separate docs-check section for stale docs and missing
-   indexes. These findings stay separate from instruction file findings.
+   indexes. These findings stay separate from instruction file findings. When
+   multiple instruction layers are audited together, duplication and ownership
+   findings appear in a separate cross-layer section.
 
 4. It gives findings like:
 
    ```text
    [WARNING] Stale sprint notes
+   Axis: B9 - Memory routing
    Location: Roadmap section
+   Reader tier: Also mid-tier agents
+   Cut safety: safe-for-all-readers
+   Impact: 90 tokens x every-turn replay
    Issue: The file includes "current sprint" notes that will go stale.
    Fix: Move this to docs/ or delete it from the always-read agent file.
    ```
+
+   Findings are ranked by token size times replay frequency, not raw file size.
+   Every proposed cut identifies the reader tier and whether the cut is safe for
+   all readers or only for a frontier model.
 
 5. It also tells you what is already good.
 
@@ -308,6 +320,10 @@ whether those changes belong in git.
 | Vague rules like "handle errors properly" | Forces the agent to guess. |
 | Missing test or build commands | Makes it hard for the agent to know when it is done. |
 | Contradictory instructions | Guarantees inconsistent behavior. |
+| Monolithic instructions and long inline examples | Spend always-loaded context on details that should load on demand. |
+| Rules duplicated across instruction layers | Drift unless one authoritative owner serves every reader. |
+| Volatile state or retyped source-of-truth values | Belongs in durable records or references that cannot drift. |
+| Frontier-only cuts on shared instruction files | Remove guidance that mid- or lower-tier readers still need. |
 | Stale docs checks | Finds roadmap/spec/todo claims that may mislead future agents. |
 | Index checks | Finds doc folders that make agents search instead of navigating. |
 
