@@ -33,24 +33,28 @@ class AuditSkillContractTests(unittest.TestCase):
         self.assertIn("--reset", text)
         self.assertIn("Writes are limited to `.karpathy.json`", text)
 
-    def test_context_axes_do_not_collide_with_setup_rows(self):
+    def test_context_axes_use_the_authoritative_namespace(self):
         text = SKILL.read_text(encoding="utf-8")
         quality = text.split("## Quality audit", 1)[1].split("## Docs audit", 1)[0]
         setup = text.split("## Audit setup / configure", 1)[1]
 
-        for axis in range(1, 12):
-            self.assertIn(f"**CE{axis} ", quality)
-        self.assertNotIn("**A1 ", quality)
-        self.assertNotIn("**A2 ", quality)
+        axes = ("A1", "A2", "A3", "A4", "B5", "B6", "B7", "B8", "B9", "B10", "C")
+        for axis in axes:
+            self.assertIn(f"**{axis} ", quality)
+        self.assertNotIn("**CE1 ", quality)
         self.assertIn("(`A1`, `A2`)", setup)
 
-    def test_global_coverage_guidance_requires_verified_inheritance(self):
+    def test_scope_and_coverage_remain_unchanged(self):
         text = SKILL.read_text(encoding="utf-8")
+        scope = text.split("## Scope: what is NOT a defect", 1)[1].split("## The four principles", 1)[0]
         coverage = text.split("## Coverage audit", 1)[1].split("## Quality audit", 1)[0]
+        quality = text.split("## Quality audit", 1)[1].split("## Docs audit", 1)[0]
 
-        self.assertIn("only after verifying that every harness and", coverage)
-        self.assertIn("otherwise keep shared rules in the project file", coverage)
-        self.assertIn("exhaustive or inspection-derivable catalogs", text)
+        self.assertNotIn("progressive-disclosure", scope)
+        self.assertIn("that way they apply\neverywhere without being repeated", coverage)
+        self.assertIn("unless the user wants project-specific overrides", coverage)
+        self.assertIn("Exhaustive file/field/config catalogs", quality)
+        self.assertIn("Verify inheritance, do not assume it", quality)
 
     def test_setup_and_configure_commands_share_the_same_workflow(self):
         setup_text = SETUP_COMMAND.read_text(encoding="utf-8")
