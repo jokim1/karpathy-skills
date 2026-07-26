@@ -83,11 +83,33 @@ deserves to exist. When in doubt, leave it and say so.
 1. **Locate and read the target file.** If the user named one, use it. Otherwise
    look for `./CLAUDE.md`, then `AGENTS.md`, then `.cursor/rules/*.mdc`. If none
    exists, say so and offer to draft one — don't audit a file that isn't there.
-2. **Run the coverage audit** (below).
-3. **Run the quality audit** (below).
-4. **Run docs checks** unless `.karpathy.json` disables them.
-5. **Write the report** in the format below. Then stop.
-6. **Apply on approval.** Only after the user approves, make the edits —
+2. **Discover the instruction layers.** Before the quality audit, check only
+   this fixed list and read every accessible source:
+   - System and developer instructions visible in the current session. Do not
+     try to reconstruct hidden prompts.
+   - The `SKILL.md` files activated for the current audit. Do not scan installed
+     skills.
+   - Project `AGENTS.md` and `CLAUDE.md` files at the repo root and along the
+     direct directory path from the repo root to the target. Do not search
+     sibling directories or recurse through the repository.
+   - Global memory at the harness's known location: Claude
+     `~/.claude/CLAUDE.md`; Codex `~/.codex/AGENTS.override.md` followed by
+     `~/.codex/AGENTS.md`; or one other location explicitly documented by the
+     active harness.
+   - Auto-memory exposed by the active harness, including Claude
+     `~/.claude/projects/<project>/memory/MEMORY.md` when that project path is
+     known. Do not enumerate project-memory directories to guess a match.
+
+   Mark a layer **Unreadable** when it exists conceptually but its content or
+   location is hidden, unknown, absent, or denied. Record the reason instead of
+   silently omitting the layer. This checklist is the complete discovery scope:
+   do not run a recursive filesystem sweep.
+3. **Run the coverage audit** (below).
+4. **Run the quality audit** (below), comparing the target with every
+   accessible instruction layer for CE8 and CE11.
+5. **Run docs checks** unless `.karpathy.json` disables them.
+6. **Write the report** in the format below. Then stop.
+7. **Apply on approval.** Only after the user approves, make the edits —
    surgically. Preserve their headings, voice, and ordering; change only the
    lines the findings name; never reformat the whole file. (Yes — the skill
    itself follows principle 3.) Do not stage or commit the instruction file.
@@ -422,10 +444,20 @@ Use this structure exactly:
 
 (repeat per finding; order Critical -> Warning -> Nit)
 
+## Layer access
+| Layer | Source checked | Status |
+|-------|----------------|--------|
+| System/developer | <visible session instructions> | Read / Unreadable: <reason> |
+| Active skills | <activated SKILL.md paths> | Read / Unreadable: <reason> |
+| Project | <direct-path AGENTS.md/CLAUDE.md locations> | Read / Unreadable: <reason> |
+| Global memory | <known harness location> | Read / Unreadable: <reason> |
+| Auto-memory | <harness-exposed or known project memory> | Read / Unreadable: <reason> |
+
 ## Cross-layer findings
-<Only when auditing more than one file together: duplication across files or
-layers, the proposed single owner, and the reader-tier verdict on each
-consolidation — including whether hoisting would strip a reader.>
+<When at least two layers were readable: duplication across files or layers,
+the proposed single owner, and the reader-tier verdict on each consolidation -
+including whether hoisting would strip a reader. Otherwise state that no
+cross-layer conclusion could be verified.>
 
 ## Optional docs checks
 <Only include when configured or explicitly skipped. Show enabled checks,

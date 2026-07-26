@@ -63,6 +63,21 @@ class AuditSkillContractTests(unittest.TestCase):
         self.assertIn("Exhaustive file/field/config catalogs", quality)
         self.assertIn("Verify inheritance, do not assume it", quality)
 
+    def test_workflow_bounds_and_reports_cross_layer_discovery(self):
+        text = SKILL.read_text(encoding="utf-8")
+        workflow = text.split("## Workflow", 1)[1].split("## Coverage audit", 1)[0]
+        report = text.split("## Report format", 1)[1].split("## Applying changes", 1)[0]
+
+        self.assertIn("System and developer instructions visible in the current session", workflow)
+        self.assertIn("The `SKILL.md` files activated for the current audit", workflow)
+        self.assertIn("Project `AGENTS.md` and `CLAUDE.md` files", workflow)
+        self.assertIn("Global memory at the harness's known location", workflow)
+        self.assertIn("Auto-memory exposed by the active harness", workflow)
+        self.assertIn("do not run a recursive filesystem sweep", workflow)
+        self.assertIn("Mark a layer **Unreadable**", workflow)
+        self.assertIn("## Layer access", report)
+        self.assertIn("Unreadable: <reason>", report)
+
     def test_setup_and_configure_commands_share_the_same_workflow(self):
         setup_text = SETUP_COMMAND.read_text(encoding="utf-8")
         configure_text = CONFIGURE_COMMAND.read_text(encoding="utf-8")
