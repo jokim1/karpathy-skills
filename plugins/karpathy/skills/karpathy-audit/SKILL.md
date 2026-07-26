@@ -4,8 +4,9 @@ description: >-
   Audit a CLAUDE.md, AGENTS.md, .cursor/rules file, or other AI-agent
   instruction/memory file against Andrej Karpathy's four LLM-coding principles.
   Checks two things: whether the file tells the agent to follow the principles
-  (coverage), and whether the file itself is lean, unambiguous, current, and
-  contradiction-free (quality). Use this whenever the user wants to review,
+  (coverage), and whether the file itself earns its context budget - lean,
+  unambiguous, current, contradiction-free, well-layered, and sized for every
+  model that reads it (quality). Use this whenever the user wants to review,
   audit, critique, tighten, clean up, or improve a CLAUDE.md / AGENTS.md /
   .cursor/rules / agent memory file, says "karpathy audit" or "/karpathy:audit",
   asks to configure or set up Karpathy audit checks, asks whether their agent
@@ -23,8 +24,9 @@ The core instruction audit has two independent halves:
 
 - **Coverage** — does the file actually instruct the agent to follow the four
   principles?
-- **Quality** — judged *by the same four principles*, is the file itself a good
-  artifact: lean, unambiguous, current, internally consistent?
+- **Quality** - judged by the same four principles plus the
+  context-engineering axes (progressive disclosure, layering, memory routing,
+  reader tier), is the file itself a good artifact?
 
 The second half is the interesting one. An instruction file is itself something
 an LLM reads on every turn. The same failure modes Karpathy describes in
@@ -57,9 +59,13 @@ good instruction file legitimately contains:
 - Domain vocabulary and project-specific conventions
 - Decisive project defaults (e.g. "treat local data as disposable")
 
-None of that is bloat. Do not tell the user to delete useful context. This
-skill audits *behavioral guidance and file hygiene* — not whether a given piece
-of project context deserves to exist. When in doubt, leave it and say so.
+None of that is bloat. Do not tell the user to delete useful context. The
+boundary is compactness: a short directory map or small key-file table is
+legitimate orientation, while an exhaustive catalog - or anything the agent
+could derive by inspecting the code or filesystem itself - is the
+progressive-disclosure defect axis CE6 flags. This skill audits *behavioral
+guidance and file hygiene* - not whether a given piece of project context
+deserves to exist. When in doubt, leave it and say so.
 
 ## The four principles
 
@@ -77,11 +83,33 @@ of project context deserves to exist. When in doubt, leave it and say so.
 1. **Locate and read the target file.** If the user named one, use it. Otherwise
    look for `./CLAUDE.md`, then `AGENTS.md`, then `.cursor/rules/*.mdc`. If none
    exists, say so and offer to draft one — don't audit a file that isn't there.
-2. **Run the coverage audit** (below).
-3. **Run the quality audit** (below).
-4. **Run docs checks** unless `.karpathy.json` disables them.
-5. **Write the report** in the format below. Then stop.
-6. **Apply on approval.** Only after the user approves, make the edits —
+2. **Discover the instruction layers.** Before the quality audit, check only
+   this fixed list and read every accessible source:
+   - System and developer instructions visible in the current session. Do not
+     try to reconstruct hidden prompts.
+   - The `SKILL.md` files activated for the current audit. Do not scan installed
+     skills.
+   - Project `AGENTS.md` and `CLAUDE.md` files at the repo root and along the
+     direct directory path from the repo root to the target. Do not search
+     sibling directories or recurse through the repository.
+   - Global memory at the harness's known location: Claude
+     `~/.claude/CLAUDE.md`; Codex `~/.codex/AGENTS.override.md` followed by
+     `~/.codex/AGENTS.md`; or one other location explicitly documented by the
+     active harness.
+   - Auto-memory exposed by the active harness, including Claude
+     `~/.claude/projects/<project>/memory/MEMORY.md` when that project path is
+     known. Do not enumerate project-memory directories to guess a match.
+
+   Mark a layer **Unreadable** when it exists conceptually but its content or
+   location is hidden, unknown, absent, or denied. Record the reason instead of
+   silently omitting the layer. This checklist is the complete discovery scope:
+   do not run a recursive filesystem sweep.
+3. **Run the coverage audit** (below).
+4. **Run the quality audit** (below), comparing the target with every
+   accessible instruction layer for CE8 and CE11.
+5. **Run docs checks** unless `.karpathy.json` disables them.
+6. **Write the report** in the format below. Then stop.
+7. **Apply on approval.** Only after the user approves, make the edits -
    surgically. Preserve their headings, voice, and ordering; change only the
    lines the findings name; never reformat the whole file. (Yes — the skill
    itself follows principle 3.) Do not stage or commit the instruction file.
@@ -110,14 +138,27 @@ Important nuance: behavioral principles often belong in the **global**
 everywhere without being repeated. If you're auditing a project-level file and
 coverage is Missing, do not assume it's a defect. Flag it, but ask whether the
 principles live in the user's global memory file, and recommend global as the
-home for them unless the user wants project-specific overrides.
+home for them unless the user wants project-specific overrides. Before
+recommending that hoist, verify which harnesses actually load the global file
+(axis CE11) - consolidating into a file only some harnesses read silently
+strips the principles from the others.
 
 ## Quality audit
 
-Turn each principle back on the file itself. Five lenses:
+Turn the principles back on the file itself, plus the context-engineering
+axes that reflect how models actually consume instruction files. One rubric:
+**CE1–CE4** are the Karpathy principles turned inward, **CE5–CE10** are
+the newer context axes, and **CE11** (reader tier) gates every proposed cut.
 
-**Simplicity → is the file bloated?**
-Flag content that costs context tokens every turn and earns nothing:
+**How to weigh a finding.** An instruction file's cost is not its byte size.
+It rides the prompt cache, so its real cost is token size multiplied by how
+many cached requests replay it. Rank findings by that product: a 1 KB file
+replayed on every turn outweighs a 12 KB file read once per session. State
+the replay tier when you rank (every-turn base > per-session digest >
+per-task read > rarely loaded).
+
+**CE1 - Lean** (Simplicity turned inward). Flag content that costs tokens
+every turn and earns nothing:
 
 - Generic advice that just restates competent default behavior ("write clean
   code", "use meaningful names", "follow best practices"). A capable model does
@@ -127,39 +168,126 @@ Flag content that costs context tokens every turn and earns nothing:
   struck-through "done" entries, PR numbers. That belongs in `docs/`, not in a
   file loaded on every turn.
 
-**Surgical / staleness → will the file rot?**
-Flag content that is correct today and misleading in a month:
+**CE2 - Unambiguous** (Think Before Coding turned inward). Flag instructions
+the agent cannot act on without guessing, or check itself against: "handle
+errors appropriately", "make it performant", "keep it clean". Rewrite each
+into something concrete and checkable. One narrow, informational check lives
+here: does the file *name the commands* that prove a change is good - test,
+typecheck, lint, build? That is distinct from coverage of principle 4 (the
+behavioral instruction to define success criteria and loop). A file can list
+every command yet never tell the agent to use them as a loop - only the
+command gap is reported here; the behavioral gap is a Coverage row. If the
+commands are absent, flag it; if present, say so.
+
+**CE3 - Current** (no staleness). Flag content that is correct today and
+misleading in a month:
 
 - Words like "currently", "for now", "this week", "in flight", "transient", "TODO".
 - Dated markers: phase numbers, sprint names, specific PR/commit references.
-- Struck-through items left in place after completion.
+- Struck-through items left in place after completion, and resolved or
+  superseded entries retained in full - collapse a resolved entry to its
+  one-line durable takeaway.
 
 Recommend moving volatile state out of the file and keeping only durable facts.
 
-**Think Before Coding → is the file unambiguous?**
-Flag instructions the agent cannot act on without guessing, or check itself
-against: "handle errors appropriately", "make it performant", "keep it clean".
-Rewrite each into something concrete and checkable.
+**CE4 - Contradiction-free.** Flag pairs of instructions that can't both be
+followed (e.g. "never delete data" alongside "treat local data as
+disposable"). Contradictions are the worst defect - they guarantee the agent
+guesses. Also flag **latent contradictions**: a project default that would
+collide with the four principles once they are added (this skill recommends
+adding them). Example: a default that licenses deleting legacy code anywhere
+vs. principle 3's "no edits to code you weren't asked to change." Rate these
+Critical - the skill's own workflow is about to activate the conflict - and
+resolve them by scoping the project default to the task, not by dropping it.
 
-**Goal-Driven → can the agent verify its work?**
-This lens is narrow and informational: does the file *name the commands* that
-prove a change is good — test, typecheck, lint, build? That is distinct from
-coverage of principle 4 (the behavioral instruction to define success criteria
-and loop). A file can list every command yet never tell the agent to use them
-as a loop — only that command gap is reported here; the behavioral gap is a
-Coverage row. If the commands are absent, flag it; if present, say so.
+**CE5 - Rules → judgment.** A frontier model handles many situations better
+via judgment than via an enumerated rule. Flag over-constraining "never do X
+/ always do Y" scaffolding that could become an outcome statement ("ship a
+change only after a named check passes" rather than a ten-step procedure).
+**Hard limit - keep the rule, do not soften:** safety, destructive or
+irreversible operations, security, credential/privacy handling, and
+merge/release authority. Rule density in a safety contract is correct, not
+bloat; when a file is mostly such rules, report the density as justified
+rather than hunting for trims. Check the reader tier (CE11) before proposing any
+judgment-based trim.
 
-**Consistency → do any rules contradict?**
-Flag pairs of instructions that can't both be followed (e.g. "never delete
-data" alongside "treat local data as disposable"). Contradictions are the worst
-defect — they guarantee the agent guesses.
+**CE6 - Progressive disclosure.** Flag a monolithic file that should be a
+light core plus an on-demand tree (skills, referenced docs loaded only when
+relevant). The file should briefly orient, spend its tokens on real gotchas,
+point to deeper material, and never state what code or filesystem inspection
+would show. Exhaustive file/field/config catalogs inlined in an always-loaded
+file are the canonical hit - move them to the doc that owns them, leaving an
+orienting summary and a pointer.
 
-Also flag **latent contradictions**: a project default that would collide with
-the four principles once they are added (this skill recommends adding them).
-Example: a default that licenses deleting legacy code anywhere vs. principle 3's
-"no edits to code you weren't asked to change." Rate these Critical — the
-skill's own workflow is about to activate the conflict — and resolve them by
-scoping the project default to the task, not by dropping it.
+**CE7 - Interfaces over examples.** Flag long inline tool-usage examples that
+a better parameter or interface description would replace. This fires rarely
+on prose-heavy instruction files; when the file's weight is specs and
+catalogs rather than worked examples, say so and move on.
+
+**CE8 - Cross-layer duplication.** Flag content repeated across the layers a
+model sees: system prompt, skills, project `AGENTS.md`/`CLAUDE.md`, global
+memory file, auto-memory. Name the single best owner. **Check the reader tier
+(CE11) before proposing the merge** - apparent duplication is sometimes the only
+copy a given reader gets.
+
+**CE9 - Memory routing.** Flag content living in an instruction file that
+belongs in a durable record or auto-memory instead: volatile state (versions,
+quota levels, "currently exhausted"), one-off incident narration, and stable
+reference data (identities, IDs, key locations). The instruction file keeps
+the durable *rule*; the evidence and state move to records loaded on demand.
+
+**CE10 - References over prose.** Flag a prose spec that should be a link or
+`@`-reference to the authoritative code, test, doc, or artifact - especially
+values that can drift from a source of truth (a re-typed config schema, a
+duplicated palette, an enumerated requirement list a tool already enforces).
+Prefer the pointer; it cannot rot out of sync.
+
+**CE11 - Reader tier (required on every finding).** Before proposing any cut,
+identify who reads this file:
+
+- **Frontier-model only** (e.g. a private preference file read by one strong
+  model). Judgment-heavy trims (CE5) and aggressive compression are safe here.
+- **Also mid-tier agents.** These models demonstrably need explicit rules a
+  frontier model can infer. Keep the explicit rule.
+- **Also lower-tier / app agents.** Most reader-constrained; explicit,
+  concrete, checkable rules are correct here. Trim least.
+
+Verify inheritance, do not assume it. A "global" file only reaches the
+harnesses that actually load it. Check before recommending a hoist-to-global:
+consolidating a rule into a file only some harnesses read silently strips it
+from the others. When in doubt, the safe home for a rule every harness
+working a repo must obey is the per-repo file.
+
+Tag each finding's proposed change:
+
+- **safe-for-all-readers** - the cut does not rely on model judgment to
+  recover the dropped guidance: a pointer to a named file, de-duplication of
+  true boilerplate, or removal of stale/volatile state.
+- **claude-only** - the cut is safe only where the reader is a frontier
+  model; it would degrade a mid- or lower-tier reader (an enumerated rule
+  turned into a judgment call, an explicit anti-fabrication rule compressed).
+  Do not apply on a shared surface while mid-tier readers depend on it.
+
+A cross-layer duplication (CE8) that is the only copy a mid- or lower-tier
+reader sees is reclassified **KEEP** by this axis - a load-bearing
+redundancy. Say so explicitly; it is a finding in its own right, not an
+oversight.
+
+Quick reference:
+
+```
+CE1  Lean            - costs tokens every turn, earns nothing?
+CE2  Unambiguous     - can the agent act on and check it? verification commands named?
+CE3  Current         - will it rot? resolved entry kept in full?
+CE4  Contradiction   - can two rules both be followed? (worst defect)
+CE5  Rules→judgment  - over-constrained? (KEEP safety/destructive/security/merge rules)
+CE6  Disclosure      - monolith that should be core + on-demand tree? states what inspection shows?
+CE7  Interfaces      - long example a parameter description would replace?
+CE8  Duplication     - repeated across layers? name one owner (check reader tier first)
+CE9  Memory routing  - volatile/reference content that belongs in a durable record?
+CE10 References      - prose spec that should be a link/@-ref to a source of truth?
+CE11 Reader tier     - who reads it? tag every cut safe-for-all vs claude-only; verify inheritance
+```
 
 ## Docs audit
 
@@ -305,12 +433,31 @@ Use this structure exactly:
 
 ## Quality findings
 ### [CRITICAL] <title>
+- **Axis:** <which axis fired: CE1–CE11>
 - **Location:** <line / section>
+- **Reader tier:** <who reads this file>
+- **Cut safety:** <safe-for-all-readers / claude-only>
+- **Impact:** <token size × replay tier, not raw bytes>
 - **Issue:** <what is wrong>
 - **Why it matters:** <concrete consequence for the agent>
 - **Fix:** <specific change>
 
 (repeat per finding; order Critical -> Warning -> Nit)
+
+## Layer access
+| Layer | Source checked | Status |
+|-------|----------------|--------|
+| System/developer | <visible session instructions> | Read / Unreadable: <reason> |
+| Active skills | <activated SKILL.md paths> | Read / Unreadable: <reason> |
+| Project | <direct-path AGENTS.md/CLAUDE.md locations> | Read / Unreadable: <reason> |
+| Global memory | <known harness location> | Read / Unreadable: <reason> |
+| Auto-memory | <harness-exposed or known project memory> | Read / Unreadable: <reason> |
+
+## Cross-layer findings
+<When at least two layers were readable: duplication across files or layers,
+the proposed single owner, and the reader-tier verdict on each consolidation -
+including whether hoisting would strip a reader. Otherwise state that no
+cross-layer conclusion could be verified.>
 
 ## Optional docs checks
 <Only include when configured or explicitly skipped. Show enabled checks,
@@ -328,9 +475,11 @@ Severity:
 
 - **Critical** — actively causes bad agent behavior: contradictions (including
   latent ones), no verification commands, instructions vague enough to force
-  guessing.
-- **Warning** — degrades quality: bloat, staleness, redundancy, ambiguity.
-- **Nit** — minor: wording, ordering, formatting.
+  guessing, or a claude-only cut proposed on a surface a mid/lower-tier
+  reader depends on.
+- **Warning** - degrades quality: bloat, staleness, redundancy with a safe
+  owner, ambiguity, drift-prone re-typed values.
+- **Nit** - minor: wording, ordering, formatting, trivial self-inconsistency.
 
 After the report, ask: "Want me to apply the proposed changes?" Then stop.
 
@@ -344,6 +493,8 @@ When approved:
   duplicating it. Never blindly append a second copy of something already there.
 - Prefer recommending the global `~/.claude/CLAUDE.md` as the home for the four
   behavioral principles; only write them into a project file if the user asks.
+  Before moving anything, verify the global file is actually loaded by every
+  harness in play (axis CE11) - a hoist that strips a reader is a regression.
 - When you move volatile content out, put it somewhere sensible (`docs/`)
   rather than deleting it, unless the user says delete.
 - Leave `CLAUDE.md`, `AGENTS.md`, `.cursor/rules`, and similar agent files

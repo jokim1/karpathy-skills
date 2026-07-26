@@ -1,5 +1,5 @@
 ---
-description: Audit a CLAUDE.md / AGENTS.md against Karpathy's four LLM-coding principles
+description: Audit agent instructions against Karpathy's principles and context engineering
 argument-hint: "[path to instruction file — defaults to ./CLAUDE.md]"
 ---
 
