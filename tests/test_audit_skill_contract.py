@@ -55,7 +55,8 @@ class AuditSkillContractTests(unittest.TestCase):
         self.assertIn(
             "Flag a mechanical rule written in prose when a named check with a "
             "pass/fail probe already exists, and point at that check. "
-            "A deletion test or a safety rule stays prose.",
+            'A judgment test ("would deleting this make things worse?") or a '
+            "safety rule stays prose.",
             flat,
         )
         self.assertIn("(`A1`, `A2`)", setup)
