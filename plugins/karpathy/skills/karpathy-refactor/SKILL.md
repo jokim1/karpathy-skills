@@ -57,13 +57,12 @@ slice-sized work this skill executes.
    unchanged tree.
 8. Read the source before judging the architecture.
 9. Find the invariant before moving code.
-10. Prefer deleting or inlining weak abstractions over adding new ones.
+10. Prefer deleting or inlining weak abstractions over adding new ones. Before a new interface, imagine deleting the module; if the complexity vanishes, inline it; if the same complexity reappears at every caller, it was earning its keep.
 11. Treat DRY as a timing question: duplication is bad when the concept is
     stable, useful while concepts are still diverging.
 12. Treat SOLID as design questions, not a checklist.
 13. Treat design patterns as names for already-existing forces, not goals.
-14. Treat classes as useful when they own state, lifecycle, polymorphism, or
-    an invariant; otherwise a function or module may be clearer.
+14. Treat classes as useful when they own state, lifecycle, polymorphism, or an invariant; otherwise a function or module may be clearer. A hypothetical future adapter alone does not justify a seam; name two real uses, or a concrete invariant, testability, lifecycle, or security benefit.
 15. Treat frameworks as justified only when they buy leverage greater than
     their conceptual and operational cost.
 16. Name the payoff: every candidate states the concrete future change it
@@ -273,7 +272,7 @@ counts, exit codes) before any edit:
 | Extract | Pull duplicated stable logic into one primitive. |
 | Split | Separate responsibilities that change for different reasons. |
 | Fence | Put vendor, framework, IO, or unstable code behind a thin boundary. |
-| Rename | Make the invariant or ownership obvious. |
+| Rename | Make the invariant or ownership obvious. A private rename whose callers all move in the same verified slice stays one slice. Use expand-contract only for an independently deployed consumer, a public compatibility window, or a change too large to verify atomically. |
 | Move | Put code where callers and maintainers expect it. |
 | Test first | Add characterization tests before moving risky behavior. |
 | Escalate | Problem exceeds behavior-preserving slices; recommend an architecture-level planning pass. |

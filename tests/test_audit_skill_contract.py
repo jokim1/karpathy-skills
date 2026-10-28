@@ -45,6 +45,19 @@ class AuditSkillContractTests(unittest.TestCase):
         # keeps its established A1/A2 instruction rows untouched.
         self.assertNotIn("**A1 ", quality)
         self.assertNotIn("**B5 ", quality)
+        self.assertNotIn("**CE12 ", quality)
+        self.assertNotIn("**CE13 ", quality)
+        flat = " ".join(quality.split())
+        self.assertIn(
+            "A procedure step with no fail-able done condition is the same defect",
+            flat,
+        )
+        self.assertIn(
+            "Flag a mechanical rule written in prose when a named check with a "
+            "pass/fail probe already exists, and point at that check. "
+            "A deletion test or a safety rule stays prose.",
+            flat,
+        )
         self.assertIn("(`A1`, `A2`)", setup)
 
     def test_scope_boundary_and_coverage_verification(self):

@@ -76,10 +76,12 @@ LEGACY_STANDALONE_HASHES = {
         "9932c5d82cb576145f92e132fe5e72fa69996edccdcac5eef4e5a08c949ac665",
         "ab7e59cfe35cb9340a358cd20ca2cf229b65f4a3c98af48d7c57d7df0f43c560",
         "b9904139473ecaf20e5fbd669ad24b9d46ae170fd4878a1b313e1dff4368879b",
+        "ccf2951c5ad8d12b2642b123dac0965d2546545e5669f8398fa1b8fb1d007b85",
         "e9b05918de18386ae682e9981f5d2402306443080309637900c44f6b21e3e05b",
         "f232534ce18a93c84051b3ae10bc0f0cc61623d46b61c79a39429dda32ba788b",
     },
     "karpathy-diff": {
+        "4aa2be03f9d2ecd5cbf239e2d2844557e65a0e4edae6cde3a87a6d5fafea3c49",
         "c38fe0ed5ed96ecf2ac010e0c06e92f7eda45bb99aa4fa0739be17615b6e957d",
     },
     "karpathy-wiki": {

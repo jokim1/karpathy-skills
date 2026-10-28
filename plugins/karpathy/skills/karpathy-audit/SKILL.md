@@ -177,7 +177,8 @@ typecheck, lint, build? That is distinct from coverage of principle 4 (the
 behavioral instruction to define success criteria and loop). A file can list
 every command yet never tell the agent to use them as a loop - only the
 command gap is reported here; the behavioral gap is a Coverage row. If the
-commands are absent, flag it; if present, say so.
+commands are absent, flag it; if present, say so. A procedure step with no
+fail-able done condition is the same defect.
 
 **CE3 - Current** (no staleness). Flag content that is correct today and
 misleading in a month:
@@ -240,7 +241,9 @@ the durable *rule*; the evidence and state move to records loaded on demand.
 `@`-reference to the authoritative code, test, doc, or artifact - especially
 values that can drift from a source of truth (a re-typed config schema, a
 duplicated palette, an enumerated requirement list a tool already enforces).
-Prefer the pointer; it cannot rot out of sync.
+Prefer the pointer; it cannot rot out of sync. Flag a mechanical rule
+written in prose when a named check with a pass/fail probe already exists,
+and point at that check. A deletion test or a safety rule stays prose.
 
 **CE11 - Reader tier (required on every finding).** Before proposing any cut,
 identify who reads this file:
@@ -277,7 +280,7 @@ Quick reference:
 
 ```
 CE1  Lean            - costs tokens every turn, earns nothing?
-CE2  Unambiguous     - can the agent act on and check it? verification commands named?
+CE2  Unambiguous     - can the agent act on and check it? verification commands named? a procedure step with no fail-able done condition?
 CE3  Current         - will it rot? resolved entry kept in full?
 CE4  Contradiction   - can two rules both be followed? (worst defect)
 CE5  Rules→judgment  - over-constrained? (KEEP safety/destructive/security/merge rules)
@@ -285,7 +288,7 @@ CE6  Disclosure      - monolith that should be core + on-demand tree? states wha
 CE7  Interfaces      - long example a parameter description would replace?
 CE8  Duplication     - repeated across layers? name one owner (check reader tier first)
 CE9  Memory routing  - volatile/reference content that belongs in a durable record?
-CE10 References      - prose spec that should be a link/@-ref to a source of truth?
+CE10 References      - prose spec that should be a link/@-ref to a source of truth? mechanical rule in prose when a named pass/fail probe exists? deletion tests and safety rules stay prose
 CE11 Reader tier     - who reads it? tag every cut safe-for-all vs claude-only; verify inheritance
 ```
 
