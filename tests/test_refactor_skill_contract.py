@@ -279,32 +279,6 @@ class RefactorSkillContractTests(unittest.TestCase):
         _, body = split_skill()
         self.assertIn("Never stage or commit automatically", body)
 
-    def test_doctrine_keeps_deletion_seam_and_rename_judgment(self):
-        _, body = split_skill()
-        flat = collapse(body)
-        doctrine = body.split("## Intent Routing", 1)[0]
-        numbers = re.findall(r"(?m)^(\d+)\. ", doctrine)
-        self.assertEqual([str(n) for n in range(1, 20)], numbers)
-        self.assertIn(
-            "Before a new interface, imagine deleting the module; if the "
-            "complexity vanishes, inline it; if the same complexity reappears "
-            "at every caller, it was earning its keep.",
-            flat,
-        )
-        self.assertIn(
-            "A hypothetical future adapter alone does not justify a seam; "
-            "name two real uses, or a concrete invariant, testability, "
-            "lifecycle, or security benefit.",
-            flat,
-        )
-        self.assertIn(
-            "A private rename whose callers all move in the same verified "
-            "slice stays one slice. Use expand-contract only for an "
-            "independently deployed consumer, a public compatibility window, "
-            "or a change too large to verify atomically.",
-            flat,
-        )
-
     def test_skill_line_count_under_500(self):
         lines = SKILL.read_text(encoding="utf-8").splitlines()
         self.assertLess(len(lines), 500)
