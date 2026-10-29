@@ -101,6 +101,7 @@ specific ways hunks fail to trace.
 - No test or check accompanies the change. For a bug fix, the strongest signal
   is a test that reproduces the bug; if the diff fixes a bug but adds no such
   test, flag it.
+- A test whose expected value is computed by the code under test proves nothing.
 
 **Orphans the change created.**
 
